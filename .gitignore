@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# tools/package.sh 的装配目录与产物
+build/
+release/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

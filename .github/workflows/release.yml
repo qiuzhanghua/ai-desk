@@ -1,0 +1,144 @@
+name: Release
+
+# 打 tag 就出一个分发包；也可以在 Actions 页面手动跑。
+#
+# 产物是 cpi 认的格式：ai-desk-<版本>-<os>-<arch>.zip，里面装着
+# manifest.yaml / payload/ / SHA256SUMS / cpi 自己 / install.sh / install.cmd。
+# 用户解压后跑 install.sh（或双击 install.cmd）就装好了。
+#
+# 契约在 cpi-go 的 docs/PACKAGE-FORMAT.md；cpi 二进制的命名契约是
+#   cpi-<版本>-<os>-<arch>[.exe]
+# 改了这里或 cpi-go 的 release.yml，两边都要对着改。
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      cpi_version:
+        description: 内嵌哪一版 cpi（对应 cpi-go 的 release tag，不带 v）
+        required: false
+        default: 0.1.0
+
+permissions:
+  contents: write
+
+env:
+  CPI_VERSION: ${{ github.event.inputs.cpi_version || '0.1.0' }}
+
+jobs:
+  build:
+    name: 打包 ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS (arm64)
+            os: macos-14
+            triple: aarch64-apple-darwin
+            goos: darwin
+            goarch: arm64
+            ext: ''
+          - name: Linux (amd64)
+            os: ubuntu-latest
+            triple: x86_64-unknown-linux-gnu
+            goos: linux
+            goarch: amd64
+            ext: ''
+          - name: Windows (amd64)
+            os: windows-latest
+            triple: x86_64-pc-windows-msvc
+            goos: windows
+            goarch: amd64
+            ext: '.exe'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.triple }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      # Tauri 在 Linux 上要的是一整套 webkit2gtk 头文件，不是可选项。
+      - name: 装 Linux 系统依赖
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: npm install
+        run: npm install
+
+      # 版本号从 tauri.conf.json 里读，脚本那边就不用再依赖 python 了。
+      - name: 算版本号
+        id: ver
+        shell: bash
+        run: |
+          version=$(node -p 'require("./src-tauri/tauri.conf.json").version')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: 下载 cpi ${{ env.CPI_VERSION }}
+        shell: bash
+        run: |
+          url="https://github.com/qiuzhanghua/cpi-go/releases/download/v${CPI_VERSION}/cpi-${CPI_VERSION}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
+          echo "下载 $url"
+          curl -fL --retry 3 --retry-delay 2 -o "cpi-bin${{ matrix.ext }}" "$url"
+          chmod +x "cpi-bin${{ matrix.ext }}" 2>/dev/null || true
+
+      # macOS 要 .app；另外两个平台只要裸可执行文件，所以 --no-bundle 就够，
+      # 顺带省掉 linuxdeploy / WiX 那一堆打包器依赖。
+      - name: tauri build
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            npx tauri build --target ${{ matrix.triple }} --bundles app
+          else
+            npx tauri build --target ${{ matrix.triple }} --no-bundle
+          fi
+
+      - name: 打成 cpi 分发包
+        shell: bash
+        run: |
+          bash tools/package.sh \
+            -c "cpi-bin${{ matrix.ext }}" \
+            -t "${{ matrix.triple }}" \
+            -v "${{ steps.ver.outputs.version }}" \
+            -n "AI Desk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ai-desk-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: release/*.zip
+          if-no-files-found: error
+
+  release:
+    name: 发 Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: 建 Release 并传产物
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -l dist
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes

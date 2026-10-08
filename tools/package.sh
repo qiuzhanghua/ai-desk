@@ -1,155 +1,157 @@
 #!/usr/bin/env bash
-# 把 tauri build 的产物打成一个 cpi 分发包：
-#     dist/ai-desk-<版本>-<平台>-<架构>.zip
 #
-# 用法：
-#   tools/package.sh -c /path/to/cpi                     # 本机平台
-#   tools/package.sh -c ./cpi -t aarch64-apple-darwin    # 指定 target
+# 组装 AI Desk 的分发包（zip）。
 #
-# 选项：
-#   -c  cpi 二进制（必填。CI 里从 cpi-go 的 release 下载对应平台那一个）
-#   -t  cargo 的 target 三元组（产物在 target/<三元组>/release 下）
-#   -o  输出目录（默认 dist）
-#   -h  帮助
+# 分工很清楚：这个脚本只负责「把构建产物摆成一个装配目录」，
+# 打包本身交给 cpi pack。算 sha256、保住可执行位、处理符号链接这三件事
+# 在 shell 里做不对 —— Windows 的 Git Bash 连 zip 都没有，sha256sum 也不保证有，
+# 而 macOS 的 .app 内部可能有符号链接，普通 zip 会把它们展开。
+#
+# 用法: tools/package.sh -c <cpi 可执行文件> [-t <cargo target 三元组>] [-o <输出目录>]
+#
+#   -c  cpi 可执行文件（也可以设环境变量 CPI_BIN）—— 会被嵌进包里
+#   -t  cargo target 三元组，例如 x86_64-apple-darwin；默认用宿主平台
+#   -o  输出目录（默认 release —— 注意不能用 dist/，那是前端构建的产物目录）
+#   -v  覆盖版本号（默认读 src-tauri/tauri.conf.json）
+#   -n  覆盖产品名（默认读 src-tauri/tauri.conf.json）
+#   -h  显示这个帮助
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")/.." && pwd)
-cd "$here"
-
 cpi_bin=${CPI_BIN:-}
-target_triple=${TARGET:-}
-out=${OUT:-dist}
+triple=""
+outdir="release"
+version=""
+product=""
 
-while getopts "c:t:o:h" opt; do
+usage() {
+  awk 'NR==1{next} /^set -euo/{exit} {sub(/^# ?/,""); print}' "$0"
+}
+
+while getopts "c:t:o:v:n:h" opt; do
   case $opt in
     c) cpi_bin=$OPTARG ;;
-    t) target_triple=$OPTARG ;;
-    o) out=$OPTARG ;;
-    h) sed -n '2,14p' "$0"; exit 0 ;;
-    *) exit 2 ;;
+    t) triple=$OPTARG ;;
+    o) outdir=$OPTARG ;;
+    v) version=$OPTARG ;;
+    n) product=$OPTARG ;;
+    h) usage; exit 0 ;;
+    *) usage; exit 2 ;;
   esac
 done
 
-[ -n "$cpi_bin" ] || { echo "缺少 -c <cpi 二进制>" >&2; exit 2; }
-[ -f "$cpi_bin" ] || { echo "找不到 cpi 二进制：$cpi_bin" >&2; exit 1; }
+if [ -z "$cpi_bin" ]; then
+  echo "缺少 -c <cpi 可执行文件>（或环境变量 CPI_BIN）。" >&2
+  echo "它会被嵌进分发包，用户解压后不需要另外装 cpi。" >&2
+  exit 2
+fi
+if [ ! -f "$cpi_bin" ]; then
+  echo "找不到 cpi：$cpi_bin" >&2
+  exit 2
+fi
+cpi_bin=$(cd "$(dirname "$cpi_bin")" && pwd)/$(basename "$cpi_bin")
 
-# ---- 从 tauri.conf.json 读显示名与版本 ----
-conf=src-tauri/tauri.conf.json
-read_conf() { python3 -c "import json;print(json.load(open('$conf'))['$1'])"; }
-product=$(read_conf productName)
-version=$(read_conf version)
+# 读 tauri.conf.json。python 在三大平台的 CI 上都有；-v/-n 可以直接绕开它。
+read_conf() {
+  local key=$1 py
+  for py in python3 python; do
+    if command -v "$py" >/dev/null 2>&1; then
+      "$py" -c "import json,sys;print(json.load(open(sys.argv[1]))[sys.argv[2]])" \
+        "$here/src-tauri/tauri.conf.json" "$key"
+      return
+    fi
+  done
+  echo "读 src-tauri/tauri.conf.json 需要 python3（或者用 -v/-n 直接给值）" >&2
+  exit 2
+}
 
-id=ai-desk   # 包 id，同时也是 Cargo 包名与 cpi 账本里的键
-cmd=ad       # 装完在终端里敲的命令
+[ -n "$product" ] || product=$(read_conf productName)
+[ -n "$version" ] || version=$(read_conf version)
 
-# ---- 平台与 target 目录 ----
-if [ -n "$target_triple" ]; then
-  case $target_triple in
-    *apple-darwin) os=darwin ;;
-    *windows*)     os=windows ;;
-    *linux*)       os=linux ;;
-    *) echo "认不出这个 target：$target_triple" >&2; exit 1 ;;
+# 目标平台与产物位置。cargo 的三元组和 Go 的 GOOS/GOARCH 是两套词，
+# 这里统一成 Go 的写法，好和 cpi 的 lib/<id>_<version>_<os>_<arch> 对上。
+if [ -n "$triple" ]; then
+  case $triple in
+    *windows*)          os=windows ;;
+    *apple-darwin*)     os=darwin ;;
+    *linux*)            os=linux ;;
+    *) echo "看不懂的 target 三元组：$triple" >&2; exit 2 ;;
   esac
-  case $target_triple in
-    aarch64*|arm64*) arch=arm64 ;;
-    x86_64*|amd64*)  arch=amd64 ;;
-    *) echo "认不出这个 target 的架构：$target_triple" >&2; exit 1 ;;
+  case $triple in
+    aarch64-*) arch=arm64 ;;
+    x86_64-*)  arch=amd64 ;;
+    *) echo "看不懂的架构：$triple" >&2; exit 2 ;;
   esac
-  rel=src-tauri/target/$target_triple/release
+  rel="$here/src-tauri/target/$triple/release"
 else
   case $(uname -s) in
     Darwin) os=darwin ;;
     Linux)  os=linux ;;
-    MINGW*|MSYS*|CYGWIN*) os=windows ;;
-    *) echo "不认识的系统：$(uname -s)" >&2; exit 1 ;;
+    *) echo "宿主平台不受支持，请用 -t 指定 target 三元组" >&2; exit 2 ;;
   esac
   case $(uname -m) in
     arm64|aarch64) arch=arm64 ;;
     x86_64|amd64)  arch=amd64 ;;
-    *) echo "不认识的架构：$(uname -m)" >&2; exit 1 ;;
+    *) echo "看不懂的宿主架构：$(uname -m)" >&2; exit 2 ;;
   esac
-  rel=src-tauri/target/release
+  rel="$here/src-tauri/target/release"
 fi
 
-# ---- 找 tauri 的产物 ----
 case $os in
   darwin)
     src="$rel/bundle/macos/$product.app"
-    [ -d "$src" ] || { echo "找不到 $src" >&2; echo "先跑：./node_modules/.bin/tauri build --bundles app" >&2; exit 1; }
-    entry="  darwin: { bundle: \"$product.app\" }"
-    extra_mode="  mode: activate"      # macOS 上默认“激活式”：等价于双击
+    [ -d "$src" ] || { echo "没找到 $src，先跑 tauri build" >&2; exit 1; }
+    entry_name="$product.app"
+    entry_block="  darwin: { bundle: \"$product.app\" }"
     ;;
   windows)
     src="$rel/ai-desk.exe"
-    [ -f "$src" ] || { echo "找不到 $src" >&2; echo "先跑：./node_modules/.bin/tauri build" >&2; exit 1; }
-    entry="  windows: { exe: ai-desk.exe }"
-    extra_mode=""
+    [ -f "$src" ] || { echo "没找到 $src，先跑 tauri build" >&2; exit 1; }
+    entry_name="ai-desk.exe"
+    entry_block="  windows: { exe: ai-desk.exe }"
     ;;
   linux)
     src="$rel/ai-desk"
-    [ -f "$src" ] || { echo "找不到 $src" >&2; echo "先跑：./node_modules/.bin/tauri build" >&2; exit 1; }
-    entry="  linux: { exe: ai-desk }"
-    extra_mode=""
+    [ -f "$src" ] || { echo "没找到 $src，先跑 tauri build" >&2; exit 1; }
+    entry_name="ai-desk"
+    entry_block="  linux: { exe: ai-desk }"
     ;;
 esac
 
-# ---- 组装 ----
-root=$(mktemp -d)
-trap 'rm -rf "$root"' EXIT
-pkg="$root/pkg"
-mkdir -p "$pkg/payload"
+stage="$here/build/package"
+rm -rf "$stage"
+mkdir -p "$stage/payload"
 
-case $os in
-  darwin)  cp -R "$src" "$pkg/payload/" ;;
-  windows) cp "$src" "$pkg/payload/ai-desk.exe" ;;
-  linux)   cp "$src" "$pkg/payload/ai-desk"; chmod +x "$pkg/payload/ai-desk" ;;
-esac
+if [ "$os" = darwin ]; then
+  # ditto 而不是 cp -R：.app 里的符号链接与扩展属性要原样保留。
+  ditto "$src" "$stage/payload/$entry_name"
+else
+  cp -R "$src" "$stage/payload/$entry_name"
+fi
 
-cat > "$pkg/manifest.yaml" <<EOF
-id: $id
-name: $product
-version: $version
-entry:
-$entry
-launch:
-  cmd: $cmd
-$extra_mode
-EOF
+# 清单描述的是「形态」，不是「平台」—— 一份清单可以三平台通用，
+# 打包时按目标平台挑 entry。这里只写当前这一个平台。
+{
+  echo "id: ai-desk"
+  echo "name: $product"
+  echo "version: $version"
+  echo "entry:"
+  echo "$entry_block"
+  echo "launch:"
+  echo "  cmd: ad"
+  [ "$os" = darwin ] && echo "  mode: activate"
+} > "$stage/manifest.yaml"
 
-cat > "$pkg/install.sh" <<'EOF'
-#!/bin/sh
-set -eu
-cd "$(dirname "$0")"
-chmod +x ./cpi 2>/dev/null || true
-exec ./cpi install . --dir "${CPI_HOME:-$HOME/ad}"
-EOF
-chmod +x "$pkg/install.sh"
+zip_path="$here/$outdir/ai-desk-$version-$os-$arch.zip"
+mkdir -p "$(dirname "$zip_path")"
+rm -f "$zip_path"
 
-cat > "$pkg/install.cmd" <<'EOF'
-@echo off
-setlocal
-cd /d "%~dp0"
-if not defined CPI_HOME set "CPI_HOME=%USERPROFILE%\ad"
-cpi.exe install . --dir "%CPI_HOME%"
-pause
-EOF
+"$cpi_bin" pack "$stage" \
+  --out "$zip_path" \
+  --os "$os" \
+  --arch "$arch" \
+  --cpi "$cpi_bin"
 
-cp "$cpi_bin" "$pkg/cpi"
-chmod +x "$pkg/cpi"
-
-hash_file() {
-  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi
-}
-(
-  cd "$pkg"
-  find payload -type f -print0 | while IFS= read -r -d '' f; do hash_file "$f"; done | LC_ALL=C sort -k2 > SHA256SUMS
-)
-
-mkdir -p "$out"
-zip_abs=$(cd "$out" && pwd)/"$id-$version-$os-$arch.zip"
-rm -f "$zip_abs"
-(cd "$pkg" && zip -q -r -y -X "$zip_abs" install.sh install.cmd cpi manifest.yaml payload SHA256SUMS)
-
-echo "打好包：$zip_abs  ($(du -h "$zip_abs" | cut -f1))"
-echo "包内："
-(cd "$pkg" && find . -mindepth 1 -maxdepth 3 | LC_ALL=C sort | sed 's/^/  /')
+echo
+echo "分发包：$zip_path"
+echo "里面装着 cpi 自己，用户解压后直接跑 install.sh / install.cmd 就行。"
