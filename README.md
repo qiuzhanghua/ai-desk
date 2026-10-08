@@ -51,7 +51,8 @@ tools/package.sh -c ./cpi -t aarch64-apple-darwin   # 指定 target
 ```
 
 `-c` 是 cpi 二进制（见 [cpi-go](https://github.com/qiuzhanghua/cpi-go) 的 release，
-每个平台一个）。产出 `dist/ai-desk-<版本>-<平台>-<架构>.zip`：
+每个平台一个）。产出 `release/ai-desk-<版本>-<平台>-<架构>.zip`
+（用 `release/` 而不是 `dist/`——后者是前端构建的产物目录，每次 `tauri build` 都会清掉）：
 
 | 成员            | 作用                                            |
 | --------------- | ----------------------------------------------- |
@@ -62,3 +63,97 @@ tools/package.sh -c ./cpi -t aarch64-apple-darwin   # 指定 target
 | `SHA256SUMS`    | payload 下每个文件的摘要，cpi 安装前强制校验    |
 
 格式细节见 cpi-go 仓库的 `docs/PACKAGE-FORMAT.md`。
+
+## 自动更新
+
+用官方的 `tauri-plugin-updater`（Rust）+ `@tauri-apps/plugin-updater`（JS）。
+
+### 版本必须钉死
+
+`tauri-plugin-updater` 的版本受 `tauri` 约束（2.12 起要求 `tauri ^2.12`），
+而 `tauri-cli` 会检查 npm 包与 Rust crate 的版本是否同一 major/minor，
+两边一旦漂移就直接拒绝构建。所以 `src-tauri/Cargo.toml` 里写的是
+`tauri-plugin-updater = "=2.11.0"`，`package.json` 里是
+`"@tauri-apps/plugin-updater": "2.11.0"`，并且用 `npm ci` 而不是 `npm install`。
+升级时这两个数字要跟着 `tauri` / `@tauri-apps/api` 一起动。
+
+### 签名密钥
+
+```sh
+./node_modules/.bin/tauri signer generate -w ~/.tauri/ai-desk.key -p '<口令>'
+```
+
+* 私钥放在**仓库之外**（`~/.tauri/`），公钥填进 `src-tauri/tauri.conf.json`
+  的 `plugins.updater.pubkey`。
+* 构建时用环境变量传私钥：
+
+  ```sh
+  export TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/ai-desk.key)"   # 内容是私钥文本
+  export TAURI_SIGNING_PRIVATE_KEY_PASSWORD='<口令>'
+  ```
+
+  注意是 `TAURI_SIGNING_PRIVATE_KEY`（内容），当前 CLI **不认**
+  `TAURI_SIGNING_PRIVATE_KEY_PATH` 那个变体。
+* 私钥丢了就再也发不出能被老版本接受的更新，只能换公钥 + 让用户手动重装。
+
+### 产物
+
+`tauri.conf.json` 里开了 `bundle.createUpdaterArtifacts`，所以除 `.app` 之外还会得到：
+
+```
+bundle/macos/AI Desk.app.tar.gz        # 更新包，顶层必须是 AI Desk.app/…
+bundle/macos/AI Desk.app.tar.gz.sig    # minisign 签名
+```
+
+发布时把 tar.gz 传到服务器，再写一份 `latest.json`：
+
+```json
+{
+  "version": "0.2.0",
+  "notes": "…",
+  "pub_date": "2026-10-09T00:00:00Z",
+  "platforms": {
+    "darwin-aarch64": {
+      "signature": "<.sig 文件的内容>",
+      "url": "https://…/AI Desk.app.tar.gz"
+    }
+  }
+}
+```
+
+平台键是 `{os}-{arch}`：macOS 上是 `darwin-aarch64` / `darwin-x86_64`
+（不是 `macos-…`），Windows 是 `windows-x86_64`，Linux 是 `linux-x86_64`。
+端点在 `tauri.conf.json` 的 `plugins.updater.endpoints` 里配。
+本机试验时用的是 `http://127.0.0.1:8787/latest.json`，为了允许明文
+HTTP 还开了 `dangerousInsecureTransportProtocol`——**正式发布必须换成 https
+并去掉这一项**，否则 release 构建会直接报 `InsecureTransportProtocol`。
+
+### 在 cpi 装好的应用里试
+
+应用启动后 2 秒会自动查一次更新，结果写在 `~/.ai-desk-update.log`。
+自动安装由 `~/.ai-desk-auto-update` 这个开关文件控制：
+
+| 文件内容            | 行为                     |
+| ------------------- | ------------------------ |
+| 不存在 / 空         | 只检查，只写日志         |
+| `check`             | 同上                     |
+| `install`           | 检查 + 下载 + 安装，不重启 |
+| `install-restart`   | 检查 + 下载 + 安装 + 重启 |
+
+用文件而不是环境变量，是因为经 LaunchServices（`open`、双击、cpi 的 darwin
+启动器）拉起的进程拿不到调用方的环境变量。
+
+### 更新与 cpi 的关系（macOS 实测）
+
+`install_inner` 的做法是：把 tar.gz 解到临时目录，`rename` 走当前 `.app`，
+再把新的 `rename` 进来——**原地替换**那个 `.app` 目录。由此：
+
+* 更新能正常工作，**与是不是 cpi 装的无关**；cpi 的启动器
+  （`~/ad/bin/ad`）和图形入口（`~/Applications/AI Desk.app` 软链）
+  都指向那个目录，更新后照旧能用。
+* 但**目录名不会变**：`~/ad/lib/ai-desk_0.1.0_darwin_arm64/` 里装的会是 0.2.0，
+  `~/ad/state.json` 里的版本号也还是 0.1.0，`cpi list` 会报旧版本。
+  要版本号重新对上，就重新跑一次 `cpi install`（覆盖式安装）。
+* 更新包里只有 `.app` 自身，`~/ad` 里的账本与启动器不由更新维护——
+  这也是为什么 cpi 只管安装、更新交给应用自己。
+

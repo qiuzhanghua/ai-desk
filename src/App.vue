@@ -1,50 +1,116 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
+import { check } from "@tauri-apps/plugin-updater";
 
 const greetMsg = ref("");
 const name = ref("");
+const version = ref("");
+const updateMsg = ref("");
 
 async function greet() {
   // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
   greetMsg.value = await invoke("greet", { name: name.value });
 }
+
+/// 走 Rust 侧命令（只检查，不安装）。
+async function checkViaRust() {
+  updateMsg.value = "检查中…";
+  try {
+    updateMsg.value = await invoke<string>("check_update");
+  } catch (e) {
+    updateMsg.value = `失败：${e}`;
+  }
+}
+
+/// 走官方 JS 插件（检查 + 下载 + 安装）。
+async function checkViaPlugin() {
+  updateMsg.value = "检查中…";
+  try {
+    const update = await check();
+    if (!update) {
+      updateMsg.value = "已经是最新版本";
+      return;
+    }
+    updateMsg.value = `发现新版本 ${update.version}，下载中…`;
+    await update.downloadAndInstall();
+    updateMsg.value = `已更新到 ${update.version}（macOS/Linux 上需要重启才生效）`;
+  } catch (e) {
+    updateMsg.value = `失败：${e}`;
+  }
+}
+
+onMounted(async () => {
+  try {
+    version.value = await getVersion();
+  } catch (e) {
+    version.value = `取版本失败：${e}`;
+  }
+});
 </script>
 
 <template>
   <main class="container">
-    <h1>Welcome to Tauri + Vue</h1>
+    <h1>AI Desk</h1>
+    <p class="version">版本 {{ version }}</p>
 
-    <div class="row">
-      <a href="https://vite.dev" target="_blank">
-        <img src="/vite.svg" class="logo vite" alt="Vite logo" />
-      </a>
-      <a href="https://tauri.app" target="_blank">
-        <img src="/tauri.svg" class="logo tauri" alt="Tauri logo" />
-      </a>
-      <a href="https://vuejs.org/" target="_blank">
-        <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
-      </a>
-    </div>
-    <p>Click on the Tauri, Vite, and Vue logos to learn more.</p>
+    <section class="card">
+      <h2>自动更新</h2>
+      <div class="row">
+        <button @click="checkViaRust">检查更新（Rust 命令）</button>
+        <button @click="checkViaPlugin">检查并安装（官方 JS 插件）</button>
+      </div>
+      <p class="status">{{ updateMsg }}</p>
+      <p class="hint">
+        端点：<code>http://127.0.0.1:8787/latest.json</code>；详细日志写在
+        <code>~/.ai-desk-update.log</code>。
+      </p>
+    </section>
 
-    <form class="row" @submit.prevent="greet">
-      <input id="greet-input" v-model="name" placeholder="Enter a name..." />
-      <button type="submit">Greet</button>
-    </form>
-    <p>{{ greetMsg }}</p>
+    <section class="card">
+      <h2>打招呼</h2>
+      <form class="row" @submit.prevent="greet">
+        <input id="greet-input" v-model="name" placeholder="Enter a name..." />
+        <button type="submit">Greet</button>
+      </form>
+      <p>{{ greetMsg }}</p>
+    </section>
   </main>
 </template>
 
 <style scoped>
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
+.version {
+  color: #888;
 }
 
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #249b73);
+.card {
+  margin: 1.5em auto;
+  padding: 1em 1.5em;
+  max-width: 40em;
+  border-radius: 12px;
+  background-color: rgba(127, 127, 127, 0.12);
+  text-align: left;
 }
 
+.card h2 {
+  margin-top: 0;
+  font-size: 1.05em;
+}
+
+.status {
+  min-height: 1.5em;
+  font-weight: 500;
+}
+
+.hint {
+  color: #888;
+  font-size: 0.85em;
+}
+
+code {
+  font-size: 0.95em;
+}
 </style>
 <style>
 :root {
@@ -65,27 +131,18 @@ async function greet() {
 
 .container {
   margin: 0;
-  padding-top: 10vh;
+  padding-top: 6vh;
   display: flex;
   flex-direction: column;
   justify-content: center;
   text-align: center;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
 .row {
   display: flex;
-  justify-content: center;
+  gap: 0.5em;
+  justify-content: flex-start;
+  flex-wrap: wrap;
 }
 
 a {
@@ -100,6 +157,7 @@ a:hover {
 
 h1 {
   text-align: center;
+  margin-bottom: 0.2em;
 }
 
 input,
@@ -153,8 +211,8 @@ button {
     background-color: #0f0f0f98;
   }
   button:active {
+    color: #ffffff;
     background-color: #0f0f0f69;
   }
 }
-
 </style>
