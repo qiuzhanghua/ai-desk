@@ -89,8 +89,12 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file \
             libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 
-      - name: npm install
-        run: npm install
+      # 必须是 npm ci 而不是 npm install：Tauri 会检查 npm 包与 Rust crate 的
+      # 版本是否同 major/minor，package.json 里写 "^2" 的话 CI 每次都可能
+      # 装到最新的 2.x，而 Cargo.lock 里的 crate 还是旧的，于是构建在
+      # 版本不匹配上直接失败。package-lock.json 已经把两边钉在一起了。
+      - name: npm ci
+        run: npm ci
 
       - name: 从源码编出 cpi
         shell: bash
