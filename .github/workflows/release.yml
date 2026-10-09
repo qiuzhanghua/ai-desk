@@ -4,7 +4,7 @@ name: 构建与发版
 # 打 tag 时再额外建一个 GitHub Release。
 #
 # 产物是 gpm 认的格式：ai-desk-<版本>-<os>-<arch>.zip，里面装着
-# ad-manifest.yaml / payload/ / tools/<os>_<arch>/cot / SHA256SUMS /
+# ad-manifest.yaml / payload/ / tools/<os>_<arch>/{cot,tdp} / SHA256SUMS /
 # gpm 自己 / install.sh / install.cmd。用户解压后跑 install.sh
 # （或双击 install.cmd）就装好了，全程不需要联网。
 #
@@ -27,11 +27,15 @@ permissions:
   contents: write
 
 env:
-  # 打进包里的 gpm 取哪个版本。跟 COT_REF 一样钉死：分发包必须可复现，
+  # 打进包里的 gpm 取哪个版本。跟工具链一样钉死：分发包必须可复现，
   # 不能今天编出 v0.6.2、明天被 gpm-go 的 main 悄悄换掉。
   GPM_REF: ${{ github.event.inputs.gpm_ref || 'v0.6.2' }}
-  # 打进包里的 cot 取哪个版本。钉住，不用 latest —— 分发包必须可复现。
-  COT_REF: v2.0.1
+  # 打进包里的 cot / tdp 从公开仓 qiuzhanghua/dl 取。那里的 tag 是滚动的
+  # （cot / tdp），版本写在资产名里：cot_<版本>_<os>_<arch>。所以这里钉住的是
+  # 资产名里那一段版本号，同一个 tag 下换版本不影响可复现性。
+  DL_REPO: qiuzhanghua/dl
+  COT_VERSION: 2.0.1
+  TDP_VERSION: 27.0.6
 
 jobs:
   build:
@@ -58,42 +62,36 @@ jobs:
             goos: darwin
             goarch: arm64
             ext: ''
-            cot_ext: tar.gz
           - name: macOS (x64)
             os: macos-26-intel
             triple: x86_64-apple-darwin
             goos: darwin
             goarch: amd64
             ext: ''
-            cot_ext: tar.gz
           - name: Linux (amd64)
             os: ubuntu-latest
             triple: x86_64-unknown-linux-gnu
             goos: linux
             goarch: amd64
             ext: ''
-            cot_ext: tar.gz
           - name: Linux (arm64)
             os: ubuntu-24.04-arm
             triple: aarch64-unknown-linux-gnu
             goos: linux
             goarch: arm64
             ext: ''
-            cot_ext: tar.gz
           - name: Windows (amd64)
             os: windows-latest
             triple: x86_64-pc-windows-msvc
             goos: windows
             goarch: amd64
             ext: '.exe'
-            cot_ext: zip
           - name: Windows (arm64)
             os: windows-11-arm
             triple: aarch64-pc-windows-msvc
             goos: windows
             goarch: arm64
             ext: '.exe'
-            cot_ext: zip
     steps:
       - uses: actions/checkout@v4
 
@@ -158,36 +156,55 @@ jobs:
           go build -trimpath -ldflags "-s -w -X main.version=$gpm_version" \
             -o "$GITHUB_WORKSPACE/gpm-bin${{ matrix.ext }}" ./cmd/gpm
 
-      # 要嵌进包里的 cot。cot_cli 是私有仓，所以这条要用一个能读它的
-      # token（secrets.COT_CLI_TOKEN）：公开仓的 GITHUB_TOKEN 拿不到别人的
-      # 私有 release 资产。取的是该版本的正式产物，不在这里编 cot ——
-      # 省几分钟，而且装进包的必须是用户真正会拿到的那个二进制。
-      - name: 取 cot 二进制
+      # 要嵌进包里的两家工具链：cot 与 tdp。取的是 dl 上的正式产物，不在这里
+      # 编 —— 省几分钟，而且装进包的必须是用户自己也会下载到的那个二进制。
+      # dl 是公开仓，默认的 GITHUB_TOKEN 就能读；以前走私有仓 cot_cli 的那个
+      # secrets.COT_CLI_TOKEN 不再需要了。
+      - name: 取 cot 与 tdp 二进制
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.COT_CLI_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if [ -z "${GH_TOKEN:-}" ]; then
-            echo "缺少 secrets.COT_CLI_TOKEN —— 它是读私有仓 qiuzhanghua/cot_cli 的 release 资产用的" >&2
-            exit 1
-          fi
-          mkdir -p cot-asset && cd cot-asset
-          gh release download "$COT_REF" -R qiuzhanghua/cot_cli \
-            -p "cot-$COT_REF-${{ matrix.triple }}.${{ matrix.cot_ext }}"
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            powershell -Command "Expand-Archive -Path (Get-ChildItem *.zip).FullName -DestinationPath . -Force"
-          else
-            tar xzf ./*.tar.gz
-          fi
-          bin=$(find . -type f -name "cot${{ matrix.ext }}" | head -1)
-          if [ -z "$bin" ]; then
-            echo "资产里没有 cot${{ matrix.ext }}" >&2
-            find . -type f >&2
-            exit 1
-          fi
-          cp "$bin" "$GITHUB_WORKSPACE/cot-bin${{ matrix.ext }}"
-          chmod +x "$GITHUB_WORKSPACE/cot-bin${{ matrix.ext }}" 2>/dev/null || true
+          case "${{ matrix.goos }}" in
+            darwin)
+              cot_asset="cot_${COT_VERSION}_darwin_${{ matrix.goarch }}"
+              tdp_asset="tdp_${TDP_VERSION}_darwin_${{ matrix.goarch }}"
+              ;;
+            linux)
+              # dl 里 Linux 按 libc 分家，Tauri 的 Linux 产物走 gnu 那一支；
+              # tdp 目前只有一支，名字里不带 libc。
+              cot_asset="cot_${COT_VERSION}_linux_${{ matrix.goarch }}_gnu"
+              tdp_asset="tdp_${TDP_VERSION}_linux_${{ matrix.goarch }}"
+              ;;
+            windows)
+              cot_asset="cot_${COT_VERSION}_windows_${{ matrix.goarch }}.exe"
+              tdp_asset="tdp_${TDP_VERSION}_windows_${{ matrix.goarch }}.exe"
+              ;;
+            *)
+              echo "认不出的平台：${{ matrix.goos }}" >&2
+              exit 1
+              ;;
+          esac
+          mkdir -p tc-asset && cd tc-asset
+          # dl 里放的是裸二进制（不是 tar.gz / zip），下下来就是可执行文件本身。
+          gh release download cot -R "$DL_REPO" -p "$cot_asset"
+          gh release download tdp -R "$DL_REPO" -p "$tdp_asset"
+          ls -l
+          for pair in "cot=$cot_asset" "tdp=$tdp_asset"; do
+            name=${pair%%=*}
+            asset=${pair#*=}
+            if [ ! -f "$asset" ]; then
+              echo "dl 里没有 $asset" >&2
+              find . -type f >&2
+              exit 1
+            fi
+            dest="$GITHUB_WORKSPACE/$name-bin${{ matrix.ext }}"
+            cp "$asset" "$dest"
+            chmod +x "$dest" 2>/dev/null || true
+          done
+          # 自报家门：包里这两份必须真能跑，版本就是上面钉的那个。
           "$GITHUB_WORKSPACE/cot-bin${{ matrix.ext }}" --version
+          "$GITHUB_WORKSPACE/tdp-bin${{ matrix.ext }}" version
 
       # 版本号从 tauri.conf.json 里读，脚本那边就不用再依赖 python 了。
       - name: 算版本号
@@ -217,6 +234,7 @@ jobs:
           bash tools/package.sh \
             -c "gpm-bin${{ matrix.ext }}" \
             -x "cot=$GITHUB_WORKSPACE/cot-bin${{ matrix.ext }}" \
+            -x "tdp=$GITHUB_WORKSPACE/tdp-bin${{ matrix.ext }}" \
             -t "${{ matrix.triple }}" \
             -v "${{ steps.ver.outputs.version }}" \
             -n "AI Desk"

@@ -35,8 +35,12 @@ unzip ai-desk-<版本>-<平台>-<架构>.zip -d ai-desk && cd ai-desk && ./insta
 装完：图形界面里能点开（macOS 会出现在 `~/Applications`，也就是启动台里），
 终端里敲 `ad` 也能启动。默认装到 `~/cot`（AI Desk 依赖 cot 才跑得完整，所以家就是
 cot 的家；`$COT_HOME` 说了算），macOS 上 `.app` 落在家的顶层
-（`~/cot/AI Desk.app`，v3.6 起不进 `lib/`），终端启动器会把 `COT_HOME` 与 `PATH`
-交给应用进程。
+（`~/cot/AI Desk.app`，v3.6 起不进 `lib/`），终端启动器会把 `COT_HOME`、`TDP_HOME` 与
+`PATH` 交给应用进程。
+
+包里还带着 tdp（清单里 `requires: [cot, tdp]`）。它不跟 AI Desk 同住：gpm 只让
+`requires` 的第一家（cot）当应用的家，tdp 回它自己的家 —— `$TDP_HOME`，没设就是
+`~/tdp`。
 
 顺带一提：包里自带一份 gpm，装的时候会把它拷进 `~/cot/bin/gpm`；那儿**已经有**
 一份时先比一次版本，包里这份更新才会替换（gpm v3.11 起，`--force` 才无视版本）。
@@ -82,22 +86,29 @@ cot 的家；`$COT_HOME` 说了算），macOS 上 `.app` 落在家的顶层
 `tools/package.sh` 把 `tauri build` 的产物打成一个 gpm 能吃的 zip：
 
 ```sh
-tools/package.sh -c /path/to/gpm -x cot=/path/to/cot   # 本机平台
-tools/package.sh -c ./gpm -t aarch64-apple-darwin -x cot=./cot
+tools/package.sh -c /path/to/gpm -x cot=/path/to/cot -x tdp=/path/to/tdp   # 本机平台
+tools/package.sh -c ./gpm -t aarch64-apple-darwin -x cot=./cot -x tdp=./tdp
 ```
 
 `-c` 是 gpm 二进制（见 [gpm-go](https://github.com/qiuzhanghua/gpm-go) 的 release，
-每个平台一个）。`-x cot=<cot 可执行文件>` 把 cot 一起打进包里（清单里会写
-`requires: [cot]`），用户安装时就不需要联网；**不给 `-x` 也能打包**，只是清单里没有
-`requires`，gpm 会把应用装到平台数据目录（macOS `~/Library/Application Support/ad`），
-终端启动器也不注入 `COT_HOME`。CI 里那份 cot 是从
-[cot_cli](https://github.com/qiuzhanghua/cot_cli) 的 release 资产里取的（`COT_REF` 钉住版本，
-需要一个能读那个私有仓的 `COT_CLI_TOKEN`）。
+每个平台一个）。`-x cot=<cot 可执行文件>` 把 cot 一起打进包里，`-x tdp=…` 同理，
+清单里写 `requires: [cot, tdp]`（可以只给一家）。**顺序有意义**：第一家是应用自己住的
+那个家（AI Desk 给的是 cot，所以默认落在 `~/cot`），第二家往后各回自己的家
+（tdp 住 `$TDP_HOME`，缺省 `~/tdp`）。用户安装时不需要联网；**不给 `-x` 也能打包**，
+只是清单里没有 `requires`，gpm 会把应用装到平台数据目录
+（macOS `~/Library/Application Support/ad`），终端启动器也不注入 `COT_HOME` / `TDP_HOME`。
+
+CI 里那两份工具链从公开仓 [dl](https://github.com/qiuzhanghua/dl) 的两个滚动 tag
+（`cot` / `tdp`）取，钉的是资产名里的版本号：`COT_VERSION: 2.0.1`、`TDP_VERSION: 27.0.6`。
+（v0.3.1 起改走这里：以前 cot 从私有仓 `cot_cli` 取，要一个 `COT_CLI_TOKEN` secret，
+现在公开仓的默认 token 就能读，那个 secret 不再需要 —— 也顺手支持了 Linux 上按 libc
+分家的 gnu / musl 两套资产，我们取 gnu 那一支。）
 
 安装时 gpm 的行为（本仓已跟到 gpm v3.10 契约）：如果 `~/cot/bin/cot` 已经在了，
 **不会**拿包里那份重铺工具链——只打印一句"已经装好 cot（…），跳过"（要重铺得加
-`--force`）；而 `.zprofile` / `.zshrc` / `.profile`（Windows 是注册表里的 `Path`）缺少
-`# >>> gpm >>>` 标记块时照样补上。应用本身每次都是覆盖式安装。
+`--force`）；tdp 同理（看的是 `$TDP_HOME/bin/tdp`）。而 `.zprofile` / `.zshrc` /
+`.profile`（Windows 是注册表里的 `Path`）缺少`# >>> gpm >>>` 标记块时照样补上。
+应用本身每次都是覆盖式安装。
 
 产出 `release/ai-desk-<版本>-<平台>-<架构>.zip`
 （用 `release/` 而不是 `dist/`——后者是前端构建的产物目录，每次 `tauri build` 都会清掉）：
@@ -108,11 +119,11 @@ tools/package.sh -c ./gpm -t aarch64-apple-darwin -x cot=./cot
 | `gpm`           | 安装器本体，按平台挑的那一个                    |
 | `ad-manifest.yaml` | 告诉 gpm 装什么、装完生成哪个命令、要哪几个工具链 |
 | `payload/`      | `AI Desk.app` / `ai-desk.exe` / `ai-desk`       |
-| `tools/<os>_<arch>/` | `-x` 嵌进来的工具链（AI Desk 是 `cot`）     |
+| `tools/<os>_<arch>/` | `-x` 嵌进来的工具链（AI Desk 是 `cot` 与 `tdp`） |
 | `SHA256SUMS`    | `payload/` 与 `tools/` 下每个文件的摘要，gpm 安装前强制校验 |
 
 包里那份 gpm 由 CI 从 gpm-go 的 **`v0.6.2`** 标记就地编出（`release.yml` 的
-`GPM_REF`，跟 `COT_REF` 一样钉死），编的时候把版本号注进去，所以
+`GPM_REF`，跟 `COT_VERSION` / `TDP_VERSION` 一样钉死），编的时候把版本号注进去，所以
 `<家>/bin/gpm version` 会自报 `0.6.2`，而不是开发期的默认值。
 
 格式细节见 gpm-go 仓库的 `docs/PACKAGE-FORMAT.md`。

@@ -10,11 +10,13 @@
 # 用法: tools/package.sh -c <gpm 可执行文件> [-x <简称=路径>]... [-t <cargo target 三元组>] [-o <输出目录>]
 #
 #   -c  gpm 可执行文件（也可以设环境变量 GPM_BIN）—— 会被嵌进包里
-#   -x  把一个命令行工具放进包里，形如 -x cot=/path/to/cot（可重复）。
-#       它会被摆成 tools/<os>_<arch>/<简称>[.exe]，并在清单里写
-#       requires: [<简称>]——gpm 安装时会拿它去铺那个家（离线，见
-#       gpm-go 的 DESIGN.md D32）。只有 requires 非空时，终端启动器才会
-#       注入 COT_HOME/TDP_HOME 并绕开 macOS 的 open（D33）。
+#   -x  把一个命令行工具放进包里，形如 -x cot=/path/to/cot（可重复，名字认
+#       cot / tdp）。它会被摆成 tools/<os>_<arch>/<简称>[.exe]，并在清单里写
+#       requires: [<简称>, …]——gpm 安装时会拿它去铺那个家（离线，见
+#       gpm-go 的 DESIGN.md D32）。**顺序有意义**：第一家是应用自己住的那个家
+#       （这里给 cot，所以默认目录是 ~/cot），第二家往后各回自己的家
+#       （tdp 住 $TDP_HOME，缺省 ~/tdp）。只有 requires 非空时，终端启动器
+#       才会注入 COT_HOME/TDP_HOME 并绕开 macOS 的 open（D33）。
 #   -t  cargo target 三元组，例如 x86_64-apple-darwin；默认用宿主平台
 #   -o  输出目录（默认 release —— 注意不能用 dist/，那是前端构建的产物目录）
 #   -v  覆盖版本号（默认读 src-tauri/tauri.conf.json）
@@ -187,8 +189,10 @@ fi
   echo "name: $product"
   echo "version: $version"
   if [ ${#tc_names[@]} -gt 0 ]; then
-    # 只要一家就够了：gpm 会把它当成「这个应用住哪个家」的依据（D21）。
-    echo "requires: [${tc_names[0]}]"
+    # 全写上，顺序就是 -x 给的顺序：第一家决定「这个应用住哪个家」（D21），
+    # 第二家往后 gpm 会让它们各回自己的家（tdp → $TDP_HOME，缺省 ~/tdp）。
+    joined=$(printf '%s, ' "${tc_names[@]}")
+    echo "requires: [${joined%, }]"
   fi
   echo "entry:"
   echo "$entry_block"
