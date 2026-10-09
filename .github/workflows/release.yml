@@ -165,28 +165,15 @@ jobs:
       # macOS 要 .app；另外两个平台只要裸可执行文件，所以 --no-bundle 就够，
       # 顺带省掉 linuxdeploy 与 WiX 那一堆打包器依赖。
       #
-      # 更新包签名：tauri.conf.json 里已经填了公钥，一旦开了
-      # createUpdaterArtifacts 而环境里没有私钥，tauri build 会直接报
-      # “A public key has been found, but no private key” 而失败。
-      # 所以这里按密钥在不在来决定开不开——没配密钥时 CI 照旧出分发包，
-      # 只是不产 `.app.tar.gz` / `.sig`。
+      # v0.2.1 起摘掉了 Tauri updater（见 README 的「更新方式」），所以既不需要
+      # 更新包签名私钥，也不再产出 `.app.tar.gz` / `.sig`。
       - name: tauri build
         shell: bash
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          if [ -n "$TAURI_SIGNING_PRIVATE_KEY" ]; then
-            echo "已配置签名私钥，本次产出更新包"
-            cfg='{"bundle":{"createUpdaterArtifacts":true}}'
-          else
-            echo "未配置 TAURI_SIGNING_PRIVATE_KEY，本次不产出更新包"
-            cfg='{"bundle":{"createUpdaterArtifacts":false}}'
-          fi
           if [ "${{ runner.os }}" = "macOS" ]; then
-            npx tauri build --config "$cfg" --target ${{ matrix.triple }} --bundles app
+            npx tauri build --target ${{ matrix.triple }} --bundles app
           else
-            npx tauri build --config "$cfg" --target ${{ matrix.triple }} --no-bundle
+            npx tauri build --target ${{ matrix.triple }} --no-bundle
           fi
 
       - name: 打成 gpm 分发包

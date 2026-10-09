@@ -2,43 +2,14 @@
 import { onMounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { getVersion } from "@tauri-apps/api/app";
-import { check } from "@tauri-apps/plugin-updater";
 
 const greetMsg = ref("");
 const name = ref("");
 const version = ref("");
-const updateMsg = ref("");
 
 async function greet() {
   // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
   greetMsg.value = await invoke("greet", { name: name.value });
-}
-
-/// 走 Rust 侧命令（只检查，不安装）。
-async function checkViaRust() {
-  updateMsg.value = "检查中…";
-  try {
-    updateMsg.value = await invoke<string>("check_update");
-  } catch (e) {
-    updateMsg.value = `失败：${e}`;
-  }
-}
-
-/// 走官方 JS 插件（检查 + 下载 + 安装）。
-async function checkViaPlugin() {
-  updateMsg.value = "检查中…";
-  try {
-    const update = await check();
-    if (!update) {
-      updateMsg.value = "已经是最新版本";
-      return;
-    }
-    updateMsg.value = `发现新版本 ${update.version}，下载中…`;
-    await update.downloadAndInstall();
-    updateMsg.value = `已更新到 ${update.version}（macOS/Linux 上需要重启才生效）`;
-  } catch (e) {
-    updateMsg.value = `失败：${e}`;
-  }
 }
 
 onMounted(async () => {
@@ -54,19 +25,6 @@ onMounted(async () => {
   <main class="container">
     <h1>AI Desk</h1>
     <p class="version">版本 {{ version }}</p>
-
-    <section class="card">
-      <h2>自动更新</h2>
-      <div class="row">
-        <button @click="checkViaRust">检查更新（Rust 命令）</button>
-        <button @click="checkViaPlugin">检查并安装（官方 JS 插件）</button>
-      </div>
-      <p class="status">{{ updateMsg }}</p>
-      <p class="hint">
-        端点：<code>http://127.0.0.1:8787/latest.json</code>；详细日志写在
-        <code>~/.ai-desk-update.log</code>。
-      </p>
-    </section>
 
     <section class="card">
       <h2>打招呼</h2>
@@ -96,20 +54,6 @@ onMounted(async () => {
 .card h2 {
   margin-top: 0;
   font-size: 1.05em;
-}
-
-.status {
-  min-height: 1.5em;
-  font-weight: 500;
-}
-
-.hint {
-  color: #888;
-  font-size: 0.85em;
-}
-
-code {
-  font-size: 0.95em;
 }
 </style>
 <style>
