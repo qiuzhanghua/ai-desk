@@ -86,7 +86,7 @@ tools/package.sh -c ./gpm -t aarch64-apple-darwin -x cot=./cot
 [cot_cli](https://github.com/qiuzhanghua/cot_cli) 的 release 资产里取的（`COT_REF` 钉住版本，
 需要一个能读那个私有仓的 `COT_CLI_TOKEN`）。
 
-安装时 gpm 的行为（本仓已跟到 gpm v3.8 契约）：如果 `~/cot/bin/cot` 已经在了，
+安装时 gpm 的行为（本仓已跟到 gpm v3.10 契约）：如果 `~/cot/bin/cot` 已经在了，
 **不会**拿包里那份重铺工具链——只打印一句"已经装好 cot（…），跳过"（要重铺得加
 `--force`）；而 `.zprofile` / `.zshrc` / `.profile`（Windows 是注册表里的 `Path`）缺少
 `# >>> gpm >>>` 标记块时照样补上。应用本身每次都是覆盖式安装。
@@ -103,9 +103,9 @@ tools/package.sh -c ./gpm -t aarch64-apple-darwin -x cot=./cot
 | `tools/<os>_<arch>/` | `-x` 嵌进来的工具链（AI Desk 是 `cot`）     |
 | `SHA256SUMS`    | `payload/` 与 `tools/` 下每个文件的摘要，gpm 安装前强制校验 |
 
-包里那份 gpm 由 CI 从 gpm-go 的 **`v0.6.0`** 标记就地编出（`release.yml` 的
+包里那份 gpm 由 CI 从 gpm-go 的 **`v0.6.1`** 标记就地编出（`release.yml` 的
 `GPM_REF`，跟 `COT_REF` 一样钉死），编的时候把版本号注进去，所以
-`<家>/bin/gpm version` 会自报 `0.6.0`，而不是开发期的默认值。
+`<家>/bin/gpm version` 会自报 `0.6.1`，而不是开发期的默认值。
 
 格式细节见 gpm-go 仓库的 `docs/PACKAGE-FORMAT.md`。
 
