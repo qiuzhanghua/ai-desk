@@ -1,6 +1,6 @@
 name: 构建与发版
 
-# 每次 push / PR 都在三个平台真打一遍包（产物流在 Actions 的 artifact 里），
+# 每次 push / PR 都在六个平台真打一遍包（产物流在 Actions 的 artifact 里），
 # 打 tag 时再额外建一个 GitHub Release。
 #
 # 产物是 gpm 认的格式：ai-desk-<版本>-<os>-<arch>.zip，里面装着
@@ -40,12 +40,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # 六个平台，各用**原生** runner：Tauri 的打包链（Linux 的 webkit2gtk、
+        # macOS 的 .app、Windows 的 MSVC）没法像纯 Go 那样在一个 runner 上交叉
+        # 编出全部产物（对照 gpm-go：那边 CGO_ENABLED=0，一个 ubuntu-latest 编六个）。
+        #
+        # 标签都取自 GitHub 文档「公开仓的标准 runner」那张表 —— 公开仓的标准 runner
+        # **免费且不限量**，所以六个都跑得起；唯一要留神的是 macOS 的并发上限
+        # （免费档 5 个），这里占 2 个。
+        #
+        # 特别注意 macOS 的 Intel：是 `macos-26-intel`（标准 runner，4C/14GB），
+        # 不是 `macos-26-large` / `macos-latest-large` —— 那种 -large/-xlarge 属于
+        # larger runner，要 Team/Enterprise 计划加信用卡才能用。
         include:
           - name: macOS (arm64)
             os: macos-14
             triple: aarch64-apple-darwin
             goos: darwin
             goarch: arm64
+            ext: ''
+            cot_ext: tar.gz
+          - name: macOS (x64)
+            os: macos-26-intel
+            triple: x86_64-apple-darwin
+            goos: darwin
+            goarch: amd64
             ext: ''
             cot_ext: tar.gz
           - name: Linux (amd64)
@@ -55,11 +73,25 @@ jobs:
             goarch: amd64
             ext: ''
             cot_ext: tar.gz
+          - name: Linux (arm64)
+            os: ubuntu-24.04-arm
+            triple: aarch64-unknown-linux-gnu
+            goos: linux
+            goarch: arm64
+            ext: ''
+            cot_ext: tar.gz
           - name: Windows (amd64)
             os: windows-latest
             triple: x86_64-pc-windows-msvc
             goos: windows
             goarch: amd64
+            ext: '.exe'
+            cot_ext: zip
+          - name: Windows (arm64)
+            os: windows-11-arm
+            triple: aarch64-pc-windows-msvc
+            goos: windows
+            goarch: arm64
             ext: '.exe'
             cot_ext: zip
     steps:
@@ -91,6 +123,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+          # 按 target 分开缓存：同一个 OS 上的 amd64 与 arm64 是两个矩阵腿，
+          # 缓存目录里的 target/<triple>/ 本来就不一样，分开更省事也更好看。
+          key: ${{ matrix.triple }}
 
       # Tauri 在 Linux 上要的是一整套 webkit2gtk 头文件，不是可选项。
       - name: 装 Linux 系统依赖
