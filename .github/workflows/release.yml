@@ -21,13 +21,15 @@ on:
       gpm_ref:
         description: 内嵌的 gpm 用 gpm-go 的哪个 ref
         required: false
-        default: main
+        default: v0.5.0
 
 permissions:
   contents: write
 
 env:
-  GPM_REF: ${{ github.event.inputs.gpm_ref || 'main' }}
+  # 打进包里的 gpm 取哪个版本。跟 COT_REF 一样钉死：分发包必须可复现，
+  # 不能今天编出 v0.5.0、明天被 gpm-go 的 main 悄悄换掉。
+  GPM_REF: ${{ github.event.inputs.gpm_ref || 'v0.5.0' }}
   # 打进包里的 cot 取哪个版本。钉住，不用 latest —— 分发包必须可复现。
   COT_REF: v2.0.1
 
@@ -64,11 +66,14 @@ jobs:
       - uses: actions/checkout@v4
 
       # gpm 与 AI Desk 是两个仓库，这里把 gpm-go 检出到一个子目录，就地编。
+      # fetch-depth: 0 是为了把 tag 也带下来 —— 下一步要用 git describe
+      # 读出这份 gpm 源码的版本号（浅克隆里没有 tag，只能退化成短 SHA）。
       - uses: actions/checkout@v4
         with:
           repository: qiuzhanghua/gpm-go
           ref: ${{ env.GPM_REF }}
           path: .gpm-go
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -109,7 +114,14 @@ jobs:
           CGO_ENABLED: '0'
         run: |
           echo "gpm 来自 $(git rev-parse --short HEAD)（$GPM_REF）"
-          go build -trimpath -o "$GITHUB_WORKSPACE/gpm-bin${{ matrix.ext }}" ./cmd/gpm
+          # 内嵌的 gpm 得能自报家门：GPM_REF 钉在 tag 上时 describe 就是那个
+          # 版本；万一有人改成 main，它会退化成 "0.5.0-3-g1a2b3c4" 这种，
+          # 至少还能看出包里的 gpm 是哪段源码编的，不会又变成 0.1.0-dev。
+          gpm_version=$(git describe --tags --always)
+          gpm_version=${gpm_version#v}
+          echo "这份 gpm 自报版本 $gpm_version"
+          go build -trimpath -ldflags "-s -w -X main.version=$gpm_version" \
+            -o "$GITHUB_WORKSPACE/gpm-bin${{ matrix.ext }}" ./cmd/gpm
 
       # 要嵌进包里的 cot。cot_cli 是私有仓，所以这条要用一个能读它的
       # token（secrets.COT_CLI_TOKEN）：公开仓的 GITHUB_TOKEN 拿不到别人的

@@ -78,6 +78,10 @@ tools/package.sh -c ./gpm -t aarch64-apple-darwin -x cot=./cot
 | `tools/<os>_<arch>/` | `-x` 嵌进来的工具链（AI Desk 是 `cot`）     |
 | `SHA256SUMS`    | `payload/` 与 `tools/` 下每个文件的摘要，gpm 安装前强制校验 |
 
+包里那份 gpm 由 CI 从 gpm-go 的 **`v0.5.0`** 标记就地编出（`release.yml` 的
+`GPM_REF`，跟 `COT_REF` 一样钉死），编的时候把版本号注进去，所以
+`<家>/bin/gpm version` 会自报 `0.5.0`，而不是开发期的默认值。
+
 格式细节见 gpm-go 仓库的 `docs/PACKAGE-FORMAT.md`。
 
 ## 自动更新
@@ -125,7 +129,7 @@ bundle/macos/AI Desk.app.tar.gz.sig    # minisign 签名
 
 ```json
 {
-  "version": "0.2.0",
+  "version": "0.1.1",
   "notes": "…",
   "pub_date": "2026-10-09T00:00:00Z",
   "platforms": {
