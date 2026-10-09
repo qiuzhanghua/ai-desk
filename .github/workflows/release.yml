@@ -21,15 +21,15 @@ on:
       gpm_ref:
         description: 内嵌的 gpm 用 gpm-go 的哪个 ref
         required: false
-        default: v0.6.1
+        default: v0.6.2
 
 permissions:
   contents: write
 
 env:
   # 打进包里的 gpm 取哪个版本。跟 COT_REF 一样钉死：分发包必须可复现，
-  # 不能今天编出 v0.6.1、明天被 gpm-go 的 main 悄悄换掉。
-  GPM_REF: ${{ github.event.inputs.gpm_ref || 'v0.6.1' }}
+  # 不能今天编出 v0.6.2、明天被 gpm-go 的 main 悄悄换掉。
+  GPM_REF: ${{ github.event.inputs.gpm_ref || 'v0.6.2' }}
   # 打进包里的 cot 取哪个版本。钉住，不用 latest —— 分发包必须可复现。
   COT_REF: v2.0.1
 

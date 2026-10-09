@@ -38,6 +38,11 @@ cot 的家；`$COT_HOME` 说了算），macOS 上 `.app` 落在家的顶层
 （`~/cot/AI Desk.app`，v3.6 起不进 `lib/`），终端启动器会把 `COT_HOME` 与 `PATH`
 交给应用进程。
 
+顺带一提：包里自带一份 gpm，装的时候会把它拷进 `~/cot/bin/gpm`；那儿**已经有**
+一份时先比一次版本，包里这份更新才会替换（gpm v3.11 起，`--force` 才无视版本）。
+所以装一次 AI Desk 也可能顺手把 gpm 自己升上去，而升级一次 AI Desk 之后
+`~/cot/bin/gpm version` 报的就是包里那份的版本。
+
 ### macOS：被 Gatekeeper 拦住了怎么办
 
 分发包现在是**未签名**的。zip 只要经过浏览器或邮件，里面每个文件都会带上
@@ -103,9 +108,9 @@ tools/package.sh -c ./gpm -t aarch64-apple-darwin -x cot=./cot
 | `tools/<os>_<arch>/` | `-x` 嵌进来的工具链（AI Desk 是 `cot`）     |
 | `SHA256SUMS`    | `payload/` 与 `tools/` 下每个文件的摘要，gpm 安装前强制校验 |
 
-包里那份 gpm 由 CI 从 gpm-go 的 **`v0.6.1`** 标记就地编出（`release.yml` 的
+包里那份 gpm 由 CI 从 gpm-go 的 **`v0.6.2`** 标记就地编出（`release.yml` 的
 `GPM_REF`，跟 `COT_REF` 一样钉死），编的时候把版本号注进去，所以
-`<家>/bin/gpm version` 会自报 `0.6.1`，而不是开发期的默认值。
+`<家>/bin/gpm version` 会自报 `0.6.2`，而不是开发期的默认值。
 
 格式细节见 gpm-go 仓库的 `docs/PACKAGE-FORMAT.md`。
 
