@@ -33,36 +33,36 @@ unzip ai-desk-<版本>-<平台>-<架构>.zip -d ai-desk && cd ai-desk && ./insta
 ```
 
 装完：图形界面里能点开（macOS 会出现在 `~/Applications`，也就是启动台里），
-终端里敲 `ad` 也能启动。默认装到 `~/ad`，用 `CPI_HOME` 可以改。
+终端里敲 `ad` 也能启动。默认装到 `~/ad`，用 `GPM_HOME` 可以改。
 
 卸载：
 
 ```sh
-~/ad/bin/cpi uninstall ai-desk
+~/ad/bin/gpm uninstall ai-desk
 ```
 
-## 打包成 cpi 分发包
+## 打包成 gpm 分发包
 
-`tools/package.sh` 把 `tauri build` 的产物打成一个 cpi 能吃的 zip：
+`tools/package.sh` 把 `tauri build` 的产物打成一个 gpm 能吃的 zip：
 
 ```sh
-tools/package.sh -c /path/to/cpi                    # 本机平台
-tools/package.sh -c ./cpi -t aarch64-apple-darwin   # 指定 target
+tools/package.sh -c /path/to/gpm                    # 本机平台
+tools/package.sh -c ./gpm -t aarch64-apple-darwin   # 指定 target
 ```
 
-`-c` 是 cpi 二进制（见 [cpi-go](https://github.com/qiuzhanghua/cpi-go) 的 release，
+`-c` 是 gpm 二进制（见 [gpm-go](https://github.com/qiuzhanghua/cpi-go) 的 release，
 每个平台一个）。产出 `release/ai-desk-<版本>-<平台>-<架构>.zip`
 （用 `release/` 而不是 `dist/`——后者是前端构建的产物目录，每次 `tauri build` 都会清掉）：
 
 | 成员            | 作用                                            |
 | --------------- | ----------------------------------------------- |
 | `install.sh`    | 用户运行的入口（`install.cmd` 是 Windows 版）   |
-| `cpi`           | 安装器本体，按平台挑的那一个                    |
-| `manifest.yaml` | 告诉 cpi 装什么、装完生成哪个命令               |
+| `gpm`           | 安装器本体，按平台挑的那一个                    |
+| `manifest.yaml` | 告诉 gpm 装什么、装完生成哪个命令               |
 | `payload/`      | `AI Desk.app` / `ai-desk.exe` / `ai-desk`       |
-| `SHA256SUMS`    | payload 下每个文件的摘要，cpi 安装前强制校验    |
+| `SHA256SUMS`    | payload 下每个文件的摘要，gpm 安装前强制校验    |
 
-格式细节见 cpi-go 仓库的 `docs/PACKAGE-FORMAT.md`。
+格式细节见 gpm-go 仓库的 `docs/PACKAGE-FORMAT.md`。
 
 ## 自动更新
 
@@ -128,7 +128,7 @@ bundle/macos/AI Desk.app.tar.gz.sig    # minisign 签名
 HTTP 还开了 `dangerousInsecureTransportProtocol`——**正式发布必须换成 https
 并去掉这一项**，否则 release 构建会直接报 `InsecureTransportProtocol`。
 
-### 在 cpi 装好的应用里试
+### 在 gpm 装好的应用里试
 
 应用启动后 2 秒会自动查一次更新，结果写在 `~/.ai-desk-update.log`。
 自动安装由 `~/.ai-desk-auto-update` 这个开关文件控制：
@@ -140,20 +140,20 @@ HTTP 还开了 `dangerousInsecureTransportProtocol`——**正式发布必须换
 | `install`           | 检查 + 下载 + 安装，不重启 |
 | `install-restart`   | 检查 + 下载 + 安装 + 重启 |
 
-用文件而不是环境变量，是因为经 LaunchServices（`open`、双击、cpi 的 darwin
+用文件而不是环境变量，是因为经 LaunchServices（`open`、双击、gpm 的 darwin
 启动器）拉起的进程拿不到调用方的环境变量。
 
-### 更新与 cpi 的关系（macOS 实测）
+### 更新与 gpm 的关系（macOS 实测）
 
 `install_inner` 的做法是：把 tar.gz 解到临时目录，`rename` 走当前 `.app`，
 再把新的 `rename` 进来——**原地替换**那个 `.app` 目录。由此：
 
-* 更新能正常工作，**与是不是 cpi 装的无关**；cpi 的启动器
+* 更新能正常工作，**与是不是 gpm 装的无关**；gpm 的启动器
   （`~/ad/bin/ad`）和图形入口（`~/Applications/AI Desk.app` 软链）
   都指向那个目录，更新后照旧能用。
 * 但**目录名不会变**：`~/ad/lib/ai-desk_0.1.0_darwin_arm64/` 里装的会是 0.2.0，
-  `~/ad/state.json` 里的版本号也还是 0.1.0，`cpi list` 会报旧版本。
-  要版本号重新对上，就重新跑一次 `cpi install`（覆盖式安装）。
+  `~/ad/state.json` 里的版本号也还是 0.1.0，`gpm list` 会报旧版本。
+  要版本号重新对上，就重新跑一次 `gpm install`（覆盖式安装）。
 * 更新包里只有 `.app` 自身，`~/ad` 里的账本与启动器不由更新维护——
-  这也是为什么 cpi 只管安装、更新交给应用自己。
+  这也是为什么 gpm 只管安装、更新交给应用自己。
 

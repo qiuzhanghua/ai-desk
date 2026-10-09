@@ -3,13 +3,13 @@
 # 组装 AI Desk 的分发包（zip）。
 #
 # 分工很清楚：这个脚本只负责「把构建产物摆成一个装配目录」，
-# 打包本身交给 cpi pack。算 sha256、保住可执行位、处理符号链接这三件事
+# 打包本身交给 gpm pack。算 sha256、保住可执行位、处理符号链接这三件事
 # 在 shell 里做不对 —— Windows 的 Git Bash 连 zip 都没有，sha256sum 也不保证有，
 # 而 macOS 的 .app 内部可能有符号链接，普通 zip 会把它们展开。
 #
-# 用法: tools/package.sh -c <cpi 可执行文件> [-t <cargo target 三元组>] [-o <输出目录>]
+# 用法: tools/package.sh -c <gpm 可执行文件> [-t <cargo target 三元组>] [-o <输出目录>]
 #
-#   -c  cpi 可执行文件（也可以设环境变量 CPI_BIN）—— 会被嵌进包里
+#   -c  gpm 可执行文件（也可以设环境变量 GPM_BIN）—— 会被嵌进包里
 #   -t  cargo target 三元组，例如 x86_64-apple-darwin；默认用宿主平台
 #   -o  输出目录（默认 release —— 注意不能用 dist/，那是前端构建的产物目录）
 #   -v  覆盖版本号（默认读 src-tauri/tauri.conf.json）
@@ -18,7 +18,7 @@
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")/.." && pwd)
-cpi_bin=${CPI_BIN:-}
+gpm_bin=${GPM_BIN:-}
 triple=""
 outdir="release"
 version=""
@@ -30,7 +30,7 @@ usage() {
 
 while getopts "c:t:o:v:n:h" opt; do
   case $opt in
-    c) cpi_bin=$OPTARG ;;
+    c) gpm_bin=$OPTARG ;;
     t) triple=$OPTARG ;;
     o) outdir=$OPTARG ;;
     v) version=$OPTARG ;;
@@ -40,16 +40,16 @@ while getopts "c:t:o:v:n:h" opt; do
   esac
 done
 
-if [ -z "$cpi_bin" ]; then
-  echo "缺少 -c <cpi 可执行文件>（或环境变量 CPI_BIN）。" >&2
-  echo "它会被嵌进分发包，用户解压后不需要另外装 cpi。" >&2
+if [ -z "$gpm_bin" ]; then
+  echo "缺少 -c <gpm 可执行文件>（或环境变量 GPM_BIN）。" >&2
+  echo "它会被嵌进分发包，用户解压后不需要另外装 gpm。" >&2
   exit 2
 fi
-if [ ! -f "$cpi_bin" ]; then
-  echo "找不到 cpi：$cpi_bin" >&2
+if [ ! -f "$gpm_bin" ]; then
+  echo "找不到 gpm：$gpm_bin" >&2
   exit 2
 fi
-cpi_bin=$(cd "$(dirname "$cpi_bin")" && pwd)/$(basename "$cpi_bin")
+gpm_bin=$(cd "$(dirname "$gpm_bin")" && pwd)/$(basename "$gpm_bin")
 
 # 读 tauri.conf.json。python 在三大平台的 CI 上都有；-v/-n 可以直接绕开它。
 read_conf() {
@@ -69,7 +69,7 @@ read_conf() {
 [ -n "$version" ] || version=$(read_conf version)
 
 # 目标平台与产物位置。cargo 的三元组和 Go 的 GOOS/GOARCH 是两套词，
-# 这里统一成 Go 的写法，好和 cpi 的 lib/<id>_<version>_<os>_<arch> 对上。
+# 这里统一成 Go 的写法，好和 gpm 的 lib/<id>_<version>_<os>_<arch> 对上。
 if [ -n "$triple" ]; then
   case $triple in
     *windows*)          os=windows ;;
@@ -146,12 +146,13 @@ zip_path="$here/$outdir/ai-desk-$version-$os-$arch.zip"
 mkdir -p "$(dirname "$zip_path")"
 rm -f "$zip_path"
 
-"$cpi_bin" pack "$stage" \
+"$gpm_bin" pack "$stage" \
   --out "$zip_path" \
   --os "$os" \
   --arch "$arch" \
-  --cpi "$cpi_bin"
+  --gpm "$gpm_bin" \
+  --default-dir "~/ad"
 
 echo
 echo "分发包：$zip_path"
-echo "里面装着 cpi 自己，用户解压后直接跑 install.sh / install.cmd 就行。"
+echo "里面装着 gpm 自己，用户解压后直接跑 install.sh / install.cmd 就行。"

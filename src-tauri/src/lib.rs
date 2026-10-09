@@ -1,11 +1,11 @@
 // AI Desk —— 主体与自动更新（Tauri updater）集成。
 //
-// 这里同时保留两条路，方便验证「用 cpi 装好之后自动更新能不能正常工作」：
+// 这里同时保留两条路，方便验证「用 gpm 装好之后自动更新能不能正常工作」：
 //   1. 启动后自动检查（由 ~/.ai-desk-auto-update 这个试验开关驱动，可选自动安装 + 重启）；
 //   2. 界面上的按钮（分别走 Rust 命令与官方 JS 插件）。
 //
 // 之所以用「文件」而不是「环境变量」当开关：经 LaunchServices / `open` 启动的
-// app 拿不到调用方的环境变量，而 cpi 的 darwin 启动器默认正是 `exec open '<app>' --args "$@"`。
+// app 拿不到调用方的环境变量，而 gpm 的 darwin 启动器默认正是 `exec open '<app>' --args "$@"`。
 
 use std::io::Write as _;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
