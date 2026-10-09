@@ -33,12 +33,13 @@ unzip ai-desk-<版本>-<平台>-<架构>.zip -d ai-desk && cd ai-desk && ./insta
 ```
 
 装完：图形界面里能点开（macOS 会出现在 `~/Applications`，也就是启动台里），
-终端里敲 `ad` 也能启动。默认装到 `~/ad`，用 `GPM_HOME` 可以改。
+终端里敲 `ad` 也能启动。默认装到 `~/cot`（AI Desk 依赖 cot 才跑得完整，所以家就是
+cot 的家；`$COT_HOME` 说了算），终端启动器会把 `COT_HOME` 与 `PATH` 交给应用进程。
 
 卸载：
 
 ```sh
-~/ad/bin/gpm uninstall ai-desk
+~/cot/bin/gpm uninstall ai-desk
 ```
 
 ## 打包成 gpm 分发包
@@ -46,21 +47,29 @@ unzip ai-desk-<版本>-<平台>-<架构>.zip -d ai-desk && cd ai-desk && ./insta
 `tools/package.sh` 把 `tauri build` 的产物打成一个 gpm 能吃的 zip：
 
 ```sh
-tools/package.sh -c /path/to/gpm                    # 本机平台
-tools/package.sh -c ./gpm -t aarch64-apple-darwin   # 指定 target
+tools/package.sh -c /path/to/gpm -x cot=/path/to/cot   # 本机平台
+tools/package.sh -c ./gpm -t aarch64-apple-darwin -x cot=./cot
 ```
 
-`-c` 是 gpm 二进制（见 [gpm-go](https://github.com/qiuzhanghua/cpi-go) 的 release，
-每个平台一个）。产出 `release/ai-desk-<版本>-<平台>-<架构>.zip`
+`-c` 是 gpm 二进制（见 [gpm-go](https://github.com/qiuzhanghua/gpm-go) 的 release，
+每个平台一个）。`-x cot=<cot 可执行文件>` 把 cot 一起打进包里（清单里会写
+`requires: [cot]`），用户安装时就不需要联网；**不给 `-x` 也能打包**，只是清单里没有
+`requires`，gpm 会把应用装到平台数据目录（macOS `~/Library/Application Support/ad`），
+终端启动器也不注入 `COT_HOME`。CI 里那份 cot 是从
+[cot_cli](https://github.com/qiuzhanghua/cot_cli) 的 release 资产里取的（`COT_REF` 钉住版本，
+需要一个能读那个私有仓的 `COT_CLI_TOKEN`）。
+
+产出 `release/ai-desk-<版本>-<平台>-<架构>.zip`
 （用 `release/` 而不是 `dist/`——后者是前端构建的产物目录，每次 `tauri build` 都会清掉）：
 
 | 成员            | 作用                                            |
 | --------------- | ----------------------------------------------- |
 | `install.sh`    | 用户运行的入口（`install.cmd` 是 Windows 版）   |
 | `gpm`           | 安装器本体，按平台挑的那一个                    |
-| `manifest.yaml` | 告诉 gpm 装什么、装完生成哪个命令               |
+| `ad-manifest.yaml` | 告诉 gpm 装什么、装完生成哪个命令、要哪几个工具链 |
 | `payload/`      | `AI Desk.app` / `ai-desk.exe` / `ai-desk`       |
-| `SHA256SUMS`    | payload 下每个文件的摘要，gpm 安装前强制校验    |
+| `tools/<os>_<arch>/` | `-x` 嵌进来的工具链（AI Desk 是 `cot`）     |
+| `SHA256SUMS`    | `payload/` 与 `tools/` 下每个文件的摘要，gpm 安装前强制校验 |
 
 格式细节见 gpm-go 仓库的 `docs/PACKAGE-FORMAT.md`。
 
@@ -140,8 +149,9 @@ HTTP 还开了 `dangerousInsecureTransportProtocol`——**正式发布必须换
 | `install`           | 检查 + 下载 + 安装，不重启 |
 | `install-restart`   | 检查 + 下载 + 安装 + 重启 |
 
-用文件而不是环境变量，是因为经 LaunchServices（`open`、双击、gpm 的 darwin
-启动器）拉起的进程拿不到调用方的环境变量。
+用文件而不是环境变量，是因为经 LaunchServices（`open`、双击）拉起的进程拿不到
+调用方的环境变量 —— gpm 的 darwin 启动器只在清单声明了 `requires` 时才绕开 `open`、
+直接 exec `.app` 里的可执行文件（那样才能把 `COT_HOME` 交给应用，见 gpm-go 的 D33）。
 
 ### 更新与 gpm 的关系（macOS 实测）
 
@@ -149,11 +159,11 @@ HTTP 还开了 `dangerousInsecureTransportProtocol`——**正式发布必须换
 再把新的 `rename` 进来——**原地替换**那个 `.app` 目录。由此：
 
 * 更新能正常工作，**与是不是 gpm 装的无关**；gpm 的启动器
-  （`~/ad/bin/ad`）和图形入口（`~/Applications/AI Desk.app` 软链）
+  （`~/cot/bin/ad`）和图形入口（`~/Applications/AI Desk.app` 软链）
   都指向那个目录，更新后照旧能用。
-* 但**目录名不会变**：`~/ad/lib/ai-desk_0.1.0_darwin_arm64/` 里装的会是 0.2.0，
-  `~/ad/state.json` 里的版本号也还是 0.1.0，`gpm list` 会报旧版本。
+* 但**目录名不会变**：`~/cot/lib/ai-desk_0.1.0_darwin_arm64/` 里装的会是 0.2.0，
+  `~/cot/state.json` 里的版本号也还是 0.1.0，`gpm list` 会报旧版本。
   要版本号重新对上，就重新跑一次 `gpm install`（覆盖式安装）。
-* 更新包里只有 `.app` 自身，`~/ad` 里的账本与启动器不由更新维护——
+* 更新包里只有 `.app` 自身，`~/cot` 里的账本与启动器不由更新维护——
   这也是为什么 gpm 只管安装、更新交给应用自己。
 

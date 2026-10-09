@@ -4,8 +4,9 @@ name: 构建与发版
 # 打 tag 时再额外建一个 GitHub Release。
 #
 # 产物是 gpm 认的格式：ai-desk-<版本>-<os>-<arch>.zip，里面装着
-# manifest.yaml / payload/ / SHA256SUMS / gpm 自己 / install.sh / install.cmd。
-# 用户解压后跑 install.sh（或双击 install.cmd）就装好了。
+# ad-manifest.yaml / payload/ / tools/<os>_<arch>/cot / SHA256SUMS /
+# gpm 自己 / install.sh / install.cmd。用户解压后跑 install.sh
+# （或双击 install.cmd）就装好了，全程不需要联网。
 #
 # gpm 不从这里下载现成的 release，而是就地用源码编一个 —— 这样两个仓库的
 # 改动能一起被验证，也不必先有 gpm 的 release 才能跑这里的 CI。
@@ -27,6 +28,8 @@ permissions:
 
 env:
   GPM_REF: ${{ github.event.inputs.gpm_ref || 'main' }}
+  # 打进包里的 cot 取哪个版本。钉住，不用 latest —— 分发包必须可复现。
+  COT_REF: v2.0.1
 
 jobs:
   build:
@@ -42,25 +45,28 @@ jobs:
             goos: darwin
             goarch: arm64
             ext: ''
+            cot_ext: tar.gz
           - name: Linux (amd64)
             os: ubuntu-latest
             triple: x86_64-unknown-linux-gnu
             goos: linux
             goarch: amd64
             ext: ''
+            cot_ext: tar.gz
           - name: Windows (amd64)
             os: windows-latest
             triple: x86_64-pc-windows-msvc
             goos: windows
             goarch: amd64
             ext: '.exe'
+            cot_ext: zip
     steps:
       - uses: actions/checkout@v4
 
       # gpm 与 AI Desk 是两个仓库，这里把 gpm-go 检出到一个子目录，就地编。
       - uses: actions/checkout@v4
         with:
-          repository: qiuzhanghua/cpi-go  # 仓库改名后换成 gpm-go
+          repository: qiuzhanghua/gpm-go
           ref: ${{ env.GPM_REF }}
           path: .gpm-go
 
@@ -105,6 +111,37 @@ jobs:
           echo "gpm 来自 $(git rev-parse --short HEAD)（$GPM_REF）"
           go build -trimpath -o "$GITHUB_WORKSPACE/gpm-bin${{ matrix.ext }}" ./cmd/gpm
 
+      # 要嵌进包里的 cot。cot_cli 是私有仓，所以这条要用一个能读它的
+      # token（secrets.COT_CLI_TOKEN）：公开仓的 GITHUB_TOKEN 拿不到别人的
+      # 私有 release 资产。取的是该版本的正式产物，不在这里编 cot ——
+      # 省几分钟，而且装进包的必须是用户真正会拿到的那个二进制。
+      - name: 取 cot 二进制
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.COT_CLI_TOKEN }}
+        run: |
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "缺少 secrets.COT_CLI_TOKEN —— 它是读私有仓 qiuzhanghua/cot_cli 的 release 资产用的" >&2
+            exit 1
+          fi
+          mkdir -p cot-asset && cd cot-asset
+          gh release download "$COT_REF" -R qiuzhanghua/cot_cli \
+            -p "cot-$COT_REF-${{ matrix.triple }}.${{ matrix.cot_ext }}"
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            powershell -Command "Expand-Archive -Path (Get-ChildItem *.zip).FullName -DestinationPath . -Force"
+          else
+            tar xzf ./*.tar.gz
+          fi
+          bin=$(find . -type f -name "cot${{ matrix.ext }}" | head -1)
+          if [ -z "$bin" ]; then
+            echo "资产里没有 cot${{ matrix.ext }}" >&2
+            find . -type f >&2
+            exit 1
+          fi
+          cp "$bin" "$GITHUB_WORKSPACE/cot-bin${{ matrix.ext }}"
+          chmod +x "$GITHUB_WORKSPACE/cot-bin${{ matrix.ext }}" 2>/dev/null || true
+          "$GITHUB_WORKSPACE/cot-bin${{ matrix.ext }}" --version
+
       # 版本号从 tauri.conf.json 里读，脚本那边就不用再依赖 python 了。
       - name: 算版本号
         id: ver
@@ -145,6 +182,7 @@ jobs:
         run: |
           bash tools/package.sh \
             -c "gpm-bin${{ matrix.ext }}" \
+            -x "cot=$GITHUB_WORKSPACE/cot-bin${{ matrix.ext }}" \
             -t "${{ matrix.triple }}" \
             -v "${{ steps.ver.outputs.version }}" \
             -n "AI Desk"
