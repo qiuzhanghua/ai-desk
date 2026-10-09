@@ -34,7 +34,9 @@ unzip ai-desk-<版本>-<平台>-<架构>.zip -d ai-desk && cd ai-desk && ./insta
 
 装完：图形界面里能点开（macOS 会出现在 `~/Applications`，也就是启动台里），
 终端里敲 `ad` 也能启动。默认装到 `~/cot`（AI Desk 依赖 cot 才跑得完整，所以家就是
-cot 的家；`$COT_HOME` 说了算），终端启动器会把 `COT_HOME` 与 `PATH` 交给应用进程。
+cot 的家；`$COT_HOME` 说了算），macOS 上 `.app` 落在家的顶层
+（`~/cot/AI Desk.app`，v3.6 起不进 `lib/`），终端启动器会把 `COT_HOME` 与 `PATH`
+交给应用进程。
 
 卸载：
 
@@ -58,6 +60,11 @@ tools/package.sh -c ./gpm -t aarch64-apple-darwin -x cot=./cot
 终端启动器也不注入 `COT_HOME`。CI 里那份 cot 是从
 [cot_cli](https://github.com/qiuzhanghua/cot_cli) 的 release 资产里取的（`COT_REF` 钉住版本，
 需要一个能读那个私有仓的 `COT_CLI_TOKEN`）。
+
+安装时 gpm 的行为（本仓已跟到 gpm v3.8 契约）：如果 `~/cot/bin/cot` 已经在了，
+**不会**拿包里那份重铺工具链——只打印一句"已经装好 cot（…），跳过"（要重铺得加
+`--force`）；而 `.zprofile` / `.zshrc` / `.profile`（Windows 是注册表里的 `Path`）缺少
+`# >>> gpm >>>` 标记块时照样补上。应用本身每次都是覆盖式安装。
 
 产出 `release/ai-desk-<版本>-<平台>-<架构>.zip`
 （用 `release/` 而不是 `dist/`——后者是前端构建的产物目录，每次 `tauri build` 都会清掉）：
@@ -161,9 +168,10 @@ HTTP 还开了 `dangerousInsecureTransportProtocol`——**正式发布必须换
 * 更新能正常工作，**与是不是 gpm 装的无关**；gpm 的启动器
   （`~/cot/bin/ad`）和图形入口（`~/Applications/AI Desk.app` 软链）
   都指向那个目录，更新后照旧能用。
-* 但**目录名不会变**：`~/cot/lib/ai-desk_0.1.0_darwin_arm64/` 里装的会是 0.2.0，
-  `~/cot/state.json` 里的版本号也还是 0.1.0，`gpm list` 会报旧版本。
-  要版本号重新对上，就重新跑一次 `gpm install`（覆盖式安装）。
+* 但**账本里的版本号不会变**：应用是原地换掉 `~/cot/AI Desk.app`（v3.6 起 GUI 应用的
+  入口就落在家的顶层，路径里不带版本号），而账本 `~/cot/cot-state.json` 里记的
+  还是 0.1.0，`gpm list` 会报旧版本。要版本号重新对上，就重新跑一次 `gpm install`
+  （覆盖式安装）。
 * 更新包里只有 `.app` 自身，`~/cot` 里的账本与启动器不由更新维护——
   这也是为什么 gpm 只管安装、更新交给应用自己。
 
