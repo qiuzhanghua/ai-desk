@@ -3,6 +3,10 @@
 # 把「本机打一个 AI Desk 分发包」要用的四样外部东西取到 .cache/ 里，
 # 反复跑不会重复下载 —— 这就是「免得每次重下 cot / tdp / gpm / GUI-Setup」的那一步。
 #
+# 四样都是从各自仓库的 release 下载现成资产（跟 CI 一样，CI 现在也不就地编了）：
+# 分发包里装的必须就是用户自己下得到的那个二进制。所以 GPM_REF / GSETUP_REF
+# 指的是 release 的 tag，不是分支。
+#
 # 版本不另立一份：脚本直接从 .github/workflows/release.yml 的 env 里读 CI 钉住的
 # 那几个（GPM_REF / GSETUP_REF / COT_VERSION / TDP_VERSION / DL_REPO），所以本地
 # 拿到的和 CI 打进包里的是同一份东西，改 pin 只改一处。也可以用同名环境变量覆盖。
@@ -11,8 +15,7 @@
 #                           [--no-gpm] [--no-gsetup] [--pack] [--smoke]
 #
 #   -p  目标平台，默认当前机器（darwin_arm64 / linux_amd64 / windows_amd64 …）。
-#       它只影响 cot / tdp / gpm 三样；GUI-Setup 是 CGO + 系统 webview，只能编
-#       宿主那一份，跨平台时会跳过并提醒（那份由 CI 出）。
+#       四样都跟着它 —— 六个平台都有现成资产，所以给别的平台预取也行。
 #   -d  缓存目录，默认 .cache（已经在 .gitignore 里）。
 #   --latest   cot / tdp 不按 pin，改成到 dl 上挑该平台最新的那一份资产。
 #   --force    已经缓存过的也重新取。
@@ -22,13 +25,11 @@
 #              配合 --pack 时用它刚打出来的那个 zip，否则挑 release/ 里最新的。
 #   -h         这个帮助。
 #
-# 缓存布局（都在 -d 之下）：
-#   dl/<资产名>                    cot / tdp 的裸二进制（dl 上放的就是裸文件）
-#   gpm/<ref>/gpm[.exe]            内嵌的 gpm
-#   gsetup/<ref>/GUI-Setup[.app]   wails 编出来的图形安装器
-#   bin/wails                      wails CLI（v2.16.0，跟 CI 一致）
-#   src/<repo>-<ref>/              上面两样用到的源码（浅克隆那个 tag）
-#   gocache/                       没设 GOCACHE 时给 go 用的构建缓存
+# 缓存布局（都在 -d 之下；两个 release 取下来的东西按平台分开放，给别的平台
+# 预取时不会覆盖本平台那一份）：
+#   dl/<资产名>                            cot / tdp 的裸二进制（资产名里带平台）
+#   gpm/<ref>/<os>_<arch>/gpm[.exe]         gpm-go release 里的 gpm
+#   gsetup/<ref>/<os>_<arch>/GUI-Setup[.app|.exe]   gsetup-go release 里的安装器
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")/.." && pwd)
@@ -64,7 +65,6 @@ command -v gh >/dev/null 2>&1 || {
   echo "要 GitHub CLI（gh）：在 cot 环境里先 . ~/cot/bin/activate。" >&2
   exit 1
 }
-command -v git >/dev/null 2>&1 || { echo "要 git。" >&2; exit 1; }
 
 # ---------- 平台 ----------
 host_os=$(uname -s)
@@ -121,9 +121,6 @@ echo "版本：gpm $GPM_REF　GUI-Setup $GSETUP_REF　cot $COT_VERSION　tdp $TD
 echo "缓存：${cache#$here/}"
 echo
 
-mkdir -p "$cache/src" "$cache/bin"
-if [ -z "${GOCACHE:-}" ]; then export GOCACHE="$cache/gocache"; fi
-
 # ---------- cot / tdp：dl 上的裸二进制 ----------
 cot_asset="cot_${COT_VERSION}_${os}_${arch}"
 tdp_asset="tdp_${TDP_VERSION}_${os}_${arch}"
@@ -152,49 +149,43 @@ if [ "$latest" = 1 ]; then
 fi
 
 dl_dir="$cache/dl"
-fetch() { # <ref/tag> <资产名> <目标目录>
-  local ref=$1 asset=$2 dir=$3
+fetch() { # <仓库> <ref/tag> <资产名> <目标目录>
+  local repo=$1 ref=$2 asset=$3 dir=$4
   mkdir -p "$dir"
   if [ -f "$dir/$asset" ] && [ "$force" = 0 ]; then
     echo "已缓存 $asset"
     return 0
   fi
-  echo "取 $DL_REPO@$ref 的 $asset …"
-  ( cd "$dir" && gh release download "$ref" -R "$DL_REPO" -p "$asset" --clobber )
+  echo "取 $repo@$ref 的 $asset …"
+  ( cd "$dir" && gh release download "$ref" -R "$repo" -p "$asset" --clobber )
 }
-fetch cot "$cot_asset" "$dl_dir"
-fetch tdp "$tdp_asset" "$dl_dir"
+fetch "$DL_REPO" cot "$cot_asset" "$dl_dir"
+fetch "$DL_REPO" tdp "$tdp_asset" "$dl_dir"
 cot_bin="$dl_dir/$cot_asset"
 tdp_bin="$dl_dir/$tdp_asset"
 chmod +x "$cot_bin" "$tdp_bin" 2>/dev/null || true
 
-# ---------- gpm ----------
+# ---------- gpm：gpm-go release 里的现成二进制 ----------
 gpm_bin=""
 if [ "$with_gpm" = 1 ]; then
-  gpm_dir="$cache/gpm/$GPM_REF"
+  gpm_dir="$cache/gpm/$GPM_REF/$platform"
   gpm_bin="$gpm_dir/gpm$ext"
   if [ -f "$gpm_bin" ] && [ "$force" = 0 ]; then
     echo "已缓存 gpm（$GPM_REF）"
   else
-    mkdir -p "$gpm_dir"
     asset="gpm-${GPM_REF#v}-${os}-${arch}${ext}"
-    if ( cd "$gpm_dir" && gh release download "$GPM_REF" -R qiuzhanghua/gpm-go -p "$asset" --clobber ) 2>/dev/null; then
-      mv -f "$gpm_dir/$asset" "$gpm_bin"
-    else
-      # GPM_REF 指到没有 Release 资产的地方（比如 main）时，照 CI 那样从源码编。
-      echo "gpm-go 的 $GPM_REF 没有资产 $asset，改成从源码编（跟 CI 一样）。"
-      src="$cache/src/gpm-go-$GPM_REF"
-      if [ ! -d "$src" ]; then
-        git clone --depth 1 --branch "$GPM_REF" https://github.com/qiuzhanghua/gpm-go "$src"
-      fi
-      ( cd "$src" && CGO_ENABLED=0 go build -trimpath \
-          -ldflags "-s -w -X main.version=${GPM_REF#v}" -o "$gpm_bin" ./cmd/gpm )
-    fi
+    # 不再就地编：包里那份 gpm 必须就是用户自己下得到的那个二进制
+    # （CI 也是这么取的）。GPM_REF 指到分支上时这里会直接失败。
+    fetch qiuzhanghua/gpm-go "$GPM_REF" "$asset" "$gpm_dir" || {
+      echo "gpm-go 的 $GPM_REF 里没有 $asset —— GPM_REF 要指 release 的 tag。" >&2
+      exit 1
+    }
+    mv -f "$gpm_dir/$asset" "$gpm_bin"
     chmod +x "$gpm_bin" 2>/dev/null || true
   fi
 fi
 
-# ---------- GUI-Setup：浅克隆那个 tag，用 wails 就地编 ----------
+# ---------- GUI-Setup：gsetup-go release 里的现成安装器 ----------
 setup_path=""
 setup_name=""
 case $os in
@@ -204,30 +195,39 @@ case $os in
 esac
 
 if [ "$with_gsetup" = 1 ]; then
-  if [ "$os" != "$host_os" ]; then
-    echo "跳过 GUI-Setup：CGO + 系统 webview 只能编宿主平台（要 $os，宿主是 $host_os），那份交给 CI。" >&2
+  setup_path="$cache/gsetup/$GSETUP_REF/$platform/$setup_name"
+  if [ -e "$setup_path" ] && [ "$force" = 0 ]; then
+    echo "已缓存 GUI-Setup（$GSETUP_REF）"
   else
-    setup_path="$cache/gsetup/$GSETUP_REF/$setup_name"
-    if [ -e "$setup_path" ] && [ "$force" = 0 ]; then
-      echo "已缓存 GUI-Setup（$GSETUP_REF）"
-    else
-      src="$cache/src/gsetup-go-$GSETUP_REF"
-      if [ ! -d "$src" ]; then
-        git clone --depth 1 --branch "$GSETUP_REF" https://github.com/qiuzhanghua/gsetup-go "$src"
-      fi
-      wails_bin="$cache/bin/wails"
-      if [ ! -x "$wails_bin" ]; then
-        echo "装 wails CLI（v2.16.0，跟 CI 一致）…"
-        GOBIN="$cache/bin" go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
-      fi
-      # Ubuntu 24.04 起只剩 webkit2gtk-4.1，Wails v2 要靠这个 tag 才去找它。
-      tags=""
-      if [ "$os" = linux ]; then tags="-tags webkit2_41"; fi
-      echo "编 GUI-Setup（$GSETUP_REF，源码在 ${src#$here/}）…"
-      ( cd "$src" && "$wails_bin" build -clean $tags >/dev/null )
-      rm -rf "$setup_path"
-      mkdir -p "$(dirname "$setup_path")"
-      cp -R "$src/build/bin/$setup_name" "$setup_path"
+    gv="${GSETUP_REF#v}"
+    gdir="$cache/gsetup/$GSETUP_REF/$platform"
+    case $os in
+      darwin)
+        asset="GUI-Setup-${gv}-darwin-${arch}.zip"
+        fetch qiuzhanghua/gsetup-go "$GSETUP_REF" "$asset" "$gdir"
+        rm -rf "$setup_path"
+        # 用 ditto 解：.app 里的符号链接与 x 位只有它认得住（unzip 会丢）。
+        if command -v ditto >/dev/null 2>&1; then
+          ditto -x -k "$gdir/$asset" "$gdir"
+        else
+          unzip -q -o "$gdir/$asset" -d "$gdir"
+        fi
+        ;;
+      windows)
+        asset="GUI-Setup-${gv}-windows-${arch}.exe"
+        fetch qiuzhanghua/gsetup-go "$GSETUP_REF" "$asset" "$gdir"
+        mv -f "$gdir/$asset" "$setup_path"
+        ;;
+      linux)
+        asset="GUI-Setup-${gv}-linux-${arch}"
+        fetch qiuzhanghua/gsetup-go "$GSETUP_REF" "$asset" "$gdir"
+        mv -f "$gdir/$asset" "$setup_path"
+        chmod +x "$setup_path" 2>/dev/null || true
+        ;;
+    esac
+    if [ ! -e "$setup_path" ]; then
+      echo "取完 $GSETUP_REF 却没见到 $setup_path —— 那边的资产名对不上？" >&2
+      exit 1
     fi
   fi
 fi
@@ -240,7 +240,19 @@ if [ "$os" = "$host_os" ] && [ "$arch" = "$host_arch" ]; then
   "$tdp_bin" version
   if [ -n "$gpm_bin" ]; then "$gpm_bin" version; fi
 else
-  echo "（目标平台不是宿主，三份都跳过试跑）"
+  echo "（目标平台不是宿主，命令行那三份跳过试跑）"
+fi
+
+# GUI-Setup 是图形程序，命令行上问不出自己的版本 —— darwin 的 .app 读 Info.plist
+# 里那个号（CI 也是拿它对号，保证包里那份就是 GSETUP_REF 那份）。
+if [ -n "$setup_path" ] && [ "$os" = darwin ] && [ -x /usr/libexec/PlistBuddy ]; then
+  declared=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+    "$setup_path/Contents/Info.plist")
+  echo "GUI-Setup $declared"
+  if [ "$declared" != "${GSETUP_REF#v}" ]; then
+    echo "GUI-Setup 自报 $declared，钉住的却是 $GSETUP_REF。" >&2
+    exit 1
+  fi
 fi
 
 # ---------- 交给 package.sh ----------

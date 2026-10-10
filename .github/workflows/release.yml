@@ -9,8 +9,10 @@ name: 构建与发版
 # 用户解压后跑 install.sh（或双击 install.cmd）就装好了，全程不需要联网；
 # 也可以直接双击 GUI-Setup.app，由它在图形界面里问清选项再调 install.sh。
 #
-# gpm 与 GUI-Setup 都不从这里下载现成的 release，而是就地用源码编 —— 这样
-# 几个仓库的改动能一起被验证，也不必先有它们的 release 才能跑这里的 CI。
+# 包里那几样外部东西（gpm、GUI-Setup、cot、tdp）都从各自仓库的 release 下载现成
+# 资产，这里不就地编 —— 装进包的必须就是用户自己下得到的那个二进制，顺带省掉每腿
+# 几分钟的编译。代价：得先有 gpm-go / gsetup-go 的 release 才跑得起来这里的 CI，
+# 所以 GPM_REF / GSETUP_REF 只能是 release 的 tag（写分支名那边没有资产可下）。
 # 契约在 gpm-go 的 docs/PACKAGE-FORMAT.md。
 on:
   push:
@@ -20,22 +22,23 @@ on:
   workflow_dispatch:
     inputs:
       gpm_ref:
-        description: 内嵌的 gpm 用 gpm-go 的哪个 ref
+        description: 内嵌的 gpm 用 gpm-go 的哪个 release tag
         required: false
         default: v0.6.4
       gsetup_ref:
-        description: 随包的 GUI-Setup 用 gsetup-go 的哪个 ref
+        description: 随包的 GUI-Setup 用 gsetup-go 的哪个 release tag
         required: false
-        default: v0.1.0
+        default: v1.0.0
 
 permissions:
   contents: write
 
 env:
   # 打进包里的 gpm 取哪个版本。跟工具链一样钉死：分发包必须可复现，
-  # 不能今天编出 v0.6.4、明天被 gpm-go 的 main 悄悄换掉。
+  # 不能今天装 v0.6.4、明天被 gpm-go 的 main 悄悄换掉。（这里写的是 release
+  # 的 tag，下载路径也是它 —— 写分支名会在下载那一步直接失败。）
   GPM_REF: ${{ github.event.inputs.gpm_ref || 'v0.6.4' }}
-  # 随包的 GUI-Setup 同理：钉在 gsetup-go 的 tag 上。
+  # 随包的 GUI-Setup 同理：钉在 gsetup-go 的 release tag 上。
   GSETUP_REF: ${{ github.event.inputs.gsetup_ref || 'v1.0.0' }}
   # 打进包里的 cot / tdp 从公开仓 qiuzhanghua/dl 取。那里的 tag 是滚动的
   # （cot / tdp），版本写在资产名里：cot_<版本>_<os>_<arch>。所以这里钉住的是
@@ -102,31 +105,65 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # gpm 与 AI Desk 是两个仓库，这里把 gpm-go 检出到一个子目录，就地编。
-      # fetch-depth: 0 是为了把 tag 也带下来 —— 下一步要用 git describe
-      # 读出这份 gpm 源码的版本号（浅克隆里没有 tag，只能退化成短 SHA）。
-      - uses: actions/checkout@v4
-        with:
-          repository: qiuzhanghua/gpm-go
-          ref: ${{ env.GPM_REF }}
-          path: .gpm-go
-          fetch-depth: 0
+      # gpm 与 AI Desk 是两个仓库：包里那份 gpm 从 gpm-go 的 release 取现成资产，
+      # 命名是那边定好的契约 gpm-<版本>-<os>-<arch>[.exe]（版本是 tag 去掉前导 v）。
+      - name: 取 gpm 二进制
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GPM_REF#v}"
+          asset="gpm-${version}-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}"
+          gh release download "$GPM_REF" -R qiuzhanghua/gpm-go -p "$asset" -D gpm-asset
+          cp "gpm-asset/$asset" "gpm-bin${{ matrix.ext }}"
+          chmod +x "gpm-bin${{ matrix.ext }}" 2>/dev/null || true
+          # 自报家门：包里的 gpm 必须真能跑，而且自报的就是钉住的那个版本，
+          # 不能是开发期的默认值。
+          "./gpm-bin${{ matrix.ext }}" version
 
-      # 随包的图形安装器 GUI-Setup 在第三个仓库里（Wails v2 写的），同样就地编。
-      - uses: actions/checkout@v4
-        with:
-          repository: qiuzhanghua/gsetup-go
-          ref: ${{ env.GSETUP_REF }}
-          path: .gsetup-go
+      # 随包的图形安装器 GUI-Setup 在第三个仓库里（Wails v2 写的），同样取 release
+      # 资产：GUI-Setup-<版本>-darwin-<arch>.zip（里面是 .app）/ -windows-<arch>.exe /
+      # -linux-<arch>。
+      - name: 取 GUI-Setup
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GSETUP_REF#v}"
+          case "${{ matrix.goos }}" in
+            darwin)
+              asset="GUI-Setup-${version}-darwin-${{ matrix.goarch }}.zip"
+              gh release download "$GSETUP_REF" -R qiuzhanghua/gsetup-go -p "$asset" -D setup-asset
+              # 用 ditto 解：它认得住 .app 里的符号链接与 x 位，unzip 会丢。
+              ditto -x -k "setup-asset/$asset" setup-asset/out
+              setup="$GITHUB_WORKSPACE/setup-asset/out/GUI-Setup.app"
+              # 同理对一下号：包里那份 GUI-Setup 自报的版本得是钉住的那个。
+              declared=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" \
+                "$setup/Contents/Info.plist")
+              echo "GUI-Setup 自报版本 $declared（要 $version）"
+              [ "$declared" = "$version" ] || { echo "版本对不上" >&2; exit 1; }
+              ;;
+            windows)
+              asset="GUI-Setup-${version}-windows-${{ matrix.goarch }}.exe"
+              gh release download "$GSETUP_REF" -R qiuzhanghua/gsetup-go -p "$asset" -D setup-asset
+              cp "setup-asset/$asset" setup-asset/GUI-Setup.exe
+              setup="$GITHUB_WORKSPACE/setup-asset/GUI-Setup.exe"
+              ;;
+            linux)
+              asset="GUI-Setup-${version}-linux-${{ matrix.goarch }}"
+              gh release download "$GSETUP_REF" -R qiuzhanghua/gsetup-go -p "$asset" -D setup-asset
+              cp "setup-asset/$asset" setup-asset/GUI-Setup
+              chmod +x setup-asset/GUI-Setup
+              setup="$GITHUB_WORKSPACE/setup-asset/GUI-Setup"
+              ;;
+          esac
+          # 传给后面的打包步骤（package.sh 的 -s 要一个平台形状对得上的路径）。
+          echo "GSETUP_PATH=$setup" >> "$GITHUB_ENV"
+          ls -l "$setup"
 
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: .gpm-go/go.mod
-          cache-dependency-path: .gpm-go/go.sum
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -153,40 +190,6 @@ jobs:
       # 版本不匹配上直接失败。package-lock.json 已经把两边钉在一起了。
       - name: npm ci
         run: npm ci
-
-      - name: 从源码编出 gpm
-        shell: bash
-        working-directory: .gpm-go
-        env:
-          CGO_ENABLED: '0'
-        run: |
-          echo "gpm 来自 $(git rev-parse --short HEAD)（$GPM_REF）"
-          # 内嵌的 gpm 得能自报家门：GPM_REF 钉在 tag 上时 describe 就是那个
-          # 版本；万一有人改成 main，它会退化成 "0.5.0-3-g1a2b3c4" 这种，
-          # 至少还能看出包里的 gpm 是哪段源码编的，不会又变成 0.1.0-dev。
-          gpm_version=$(git describe --tags --always)
-          gpm_version=${gpm_version#v}
-          echo "这份 gpm 自报版本 $gpm_version"
-          go build -trimpath -ldflags "-s -w -X main.version=$gpm_version" \
-            -o "$GITHUB_WORKSPACE/gpm-bin${{ matrix.ext }}" ./cmd/gpm
-
-      # 随包的图形安装器（GUI-Setup）：Wails v2 = Go + 系统 webview，六个平台各
-      # 自原生编一份（CGO，没法像 gpm 那样一个 runner 编六个）。frontend/dist
-      # 与 wailsjs 都在仓库里、wails.json 的 frontend:build 留空，所以这里不
-      # 需要 npm，只要 wails CLI 与系统 webkit 头文件（Linux 上已经装过）。
-      - name: 编出 GUI-Setup
-        shell: bash
-        working-directory: .gsetup-go
-        run: |
-          echo "GUI-Setup 来自 $(git rev-parse --short HEAD)（$GSETUP_REF）"
-          go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
-          wails_bin="$(go env GOPATH)/bin/wails"
-          # Ubuntu 24.04 起只有 webkit2gtk-4.1 了，Wails v2 要靠这个 tag 才会
-          # 去找它（4.0 那一支在新镜像上已经不存在）。
-          tags=""
-          if [ "${{ runner.os }}" = "Linux" ]; then tags="-tags webkit2_41"; fi
-          "$wails_bin" build -clean $tags
-          ls -l build/bin
 
       # 要嵌进包里的两家工具链：cot 与 tdp。取的是 dl 上的正式产物，不在这里
       # 编 —— 省几分钟，而且装进包的必须是用户自己也会下载到的那个二进制。
@@ -263,11 +266,6 @@ jobs:
       - name: 打成 gpm 分发包
         shell: bash
         run: |
-          case "${{ matrix.goos }}" in
-            darwin)  setup="$GITHUB_WORKSPACE/.gsetup-go/build/bin/GUI-Setup.app" ;;
-            windows) setup="$GITHUB_WORKSPACE/.gsetup-go/build/bin/GUI-Setup.exe" ;;
-            linux)   setup="$GITHUB_WORKSPACE/.gsetup-go/build/bin/GUI-Setup" ;;
-          esac
           bash tools/package.sh \
             -c "gpm-bin${{ matrix.ext }}" \
             -x "cot=$GITHUB_WORKSPACE/cot-bin${{ matrix.ext }}" \
@@ -275,7 +273,7 @@ jobs:
             -t "${{ matrix.triple }}" \
             -v "${{ steps.ver.outputs.version }}" \
             -n "AI Desk" \
-            -s "$setup"
+            -s "$GSETUP_PATH"
 
       - uses: actions/upload-artifact@v4
         with:

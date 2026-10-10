@@ -142,10 +142,12 @@ CI 里那两份工具链从公开仓 [dl](https://github.com/qiuzhanghua/dl) 的
 | `tools/<os>_<arch>/` | `-x` 嵌进来的工具链（AI Desk 是 `cot` 与 `tdp`） |
 | `SHA256SUMS`    | `payload/` 与 `tools/` 下每个文件的摘要，gpm 安装前强制校验 |
 
-包里那份 gpm 由 CI 从 gpm-go 的 **`v0.6.4`** 标记就地编出（`release.yml` 的
-`GPM_REF`，跟 `COT_VERSION` / `TDP_VERSION` 一样钉死），编的时候把版本号注进去，所以
-`<家>/bin/gpm version` 会自报 `0.6.4`，而不是开发期的默认值。随包的 `GUI-Setup.app`
-同理，由 CI 从 gsetup-go 的 **`v1.0.0`** 标记就地编出（`GSETUP_REF`）。
+包里那几样外部东西都在各自仓库里发好了 release，CI 直接下载现成资产（不再就地编）：
+gpm 取 gpm-go 的 **`v0.6.4`**（`release.yml` 的 `GPM_REF`，跟 `COT_VERSION` /
+`TDP_VERSION` 一样钉死），`GUI-Setup` 取 gsetup-go 的 **`v1.0.0`**（`GSETUP_REF`），
+cot / tdp 取 `qiuzhanghua/dl` 上的正式产物。这样装进包里的，就是用户自己去那些
+仓库下也会拿到的同一个二进制；代价是 `GPM_REF` / `GSETUP_REF` 必须写 release 的
+tag（写分支名会在下载那一步直接失败）。下完还会各自问一句版本，对不上就当场失败。
 
 格式细节见 gpm-go 仓库的 `docs/PACKAGE-FORMAT.md`。
 
@@ -158,6 +160,7 @@ CI 里那两份工具链从公开仓 [dl](https://github.com/qiuzhanghua/dl) 的
 tools/fetch-deps.sh                        # 取本机平台那四样，缓存命中就跳过
 tools/fetch-deps.sh --force                # 重新取
 tools/fetch-deps.sh --latest               # cot / tdp 不按钉的版本，挑最新
+tools/fetch-deps.sh -p linux_arm64         # 给别的平台预取（六个平台都有现成资产）
 tools/fetch-deps.sh --no-gpm --no-gsetup   # 只要 cot 与 tdp
 tools/fetch-deps.sh --pack                 # 取完顺手调 tools/package.sh 打包
 tools/fetch-deps.sh --smoke                # 取完顺手跑 tools/smoke-test.sh
@@ -165,9 +168,11 @@ tools/fetch-deps.sh --smoke                # 取完顺手跑 tools/smoke-test.sh
 
 版本号不另抄一份：脚本从 `.github/workflows/release.yml` 的 env 里读
 `GPM_REF` / `GSETUP_REF` / `COT_VERSION` / `TDP_VERSION`（同名环境变量可以覆盖）。
-缓存齐了之后它会把你该敲的那行 `tools/package.sh …` 原样打出来，复制就能用。
-布局是 `dl/`（cot、tdp）、`gpm/<ref>/`、`gsetup/<ref>/`（GUI-Setup，没有现成产物时
-就地编）、`bin/wails`、`src/<仓>-<ref>/`、`gocache/`。
+下载走的是 `gh release download`，跟 CI 同一条路 —— 所以本机取到的和 CI 打进包里的
+是同一份东西。缓存齐了之后它会把你该敲的那行 `tools/package.sh …` 原样打出来，
+复制就能用。布局是 `dl/`（cot、tdp 的裸二进制）、`gpm/<ref>/<os>_<arch>/`、
+`gsetup/<ref>/<os>_<arch>/`（GUI-Setup，darwin 下是解开的 `.app`）；按平台分开放，
+给别的平台预取不会盖掉本平台那一份。实测本机四样齐活约 28 MB。
 
 打好包想验一验，`tools/smoke-test.sh <zip>` 在临时 HOME 里走一整遍
 「解压 → `./install.sh --yes` → 断言 → `<家>/bin/gpm uninstall <id> --yes` → 断言」，
