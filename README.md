@@ -259,6 +259,29 @@ major/minor（`tauri-cli` 会检查，漂移就直接拒绝构建）；端点与
 （否则得开 `dangerousInsecureTransportProtocol`，那一项不该进正式产物）；
 发布流程里得真的把更新包与 `latest.json` 传上去。
 
+## 发版
+
+版本号有**五处**要一起抬（漏一处 CI 会在发 Release 前拦住：它拿 tag 与
+`tauri.conf.json` 的版本对，对不上就报错）：
+
+* `package.json` 的 `version`
+* `package-lock.json` 里根包那两条 `version`（第 3、9 行那两个，依赖里没有本仓版本号）
+* `src-tauri/Cargo.toml` 的 `version`
+* `src-tauri/Cargo.lock` 里 `name = "ai-desk"` 那一条的 `version`
+* `src-tauri/tauri.conf.json` 的 `version` —— 界面「关于」里显示的、也是 CI 核的那一个
+
+然后提交、打带注释的 tag，两个远端都推：
+
+```sh
+git tag -a v0.3.6 -m "AI Desk v0.3.6：……"
+git push origin main v0.3.6    # GitHub：CI（六条打包腿）与发 Release 都在这儿
+git push gitee main v0.3.6     # Gitee：镜像，同样推 main 与 tag
+```
+
+`.github/workflows/release.yml` 收到 `v*` tag 后六条腿各编一份 zip，再用
+`gh release create` 建 Release 附上六份产物。远端：`origin` = GitHub，
+`gitee` = Gitee 镜像；CI 与 Release 都在 GitHub，但**两边都推**。
+
 ## 相关仓库与文档
 
 | 仓库 / 文档 | 在这里的角色 |
