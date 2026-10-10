@@ -32,6 +32,10 @@ npm run tauri dev
 unzip ai-desk-<版本>-<平台>-<架构>.zip -d ai-desk && cd ai-desk && ./install.sh
 ```
 
+`install.sh` 会把后面的参数原样交给 gpm（v0.6.3 起，gpm v3.12 的 D42），所以想装到别处
+直接 `./install.sh --dir ~/tdp`；带上 `--yes` 就跳过"要不要写 PATH 块"的那次询问
+（脚本、管道里没人回答问题，不加 `--yes` 就会跳过 PATH 集成）。
+
 装完：图形界面里能点开（macOS 会出现在 `~/Applications`，也就是启动台里），
 终端里敲 `ad` 也能启动。默认装到 `~/cot`（AI Desk 依赖 cot 才跑得完整，所以家就是
 cot 的家；`$COT_HOME` 说了算），macOS 上 `.app` 落在家的顶层
@@ -122,9 +126,9 @@ CI 里那两份工具链从公开仓 [dl](https://github.com/qiuzhanghua/dl) 的
 | `tools/<os>_<arch>/` | `-x` 嵌进来的工具链（AI Desk 是 `cot` 与 `tdp`） |
 | `SHA256SUMS`    | `payload/` 与 `tools/` 下每个文件的摘要，gpm 安装前强制校验 |
 
-包里那份 gpm 由 CI 从 gpm-go 的 **`v0.6.2`** 标记就地编出（`release.yml` 的
+包里那份 gpm 由 CI 从 gpm-go 的 **`v0.6.3`** 标记就地编出（`release.yml` 的
 `GPM_REF`，跟 `COT_VERSION` / `TDP_VERSION` 一样钉死），编的时候把版本号注进去，所以
-`<家>/bin/gpm version` 会自报 `0.6.2`，而不是开发期的默认值。
+`<家>/bin/gpm version` 会自报 `0.6.3`，而不是开发期的默认值。
 
 格式细节见 gpm-go 仓库的 `docs/PACKAGE-FORMAT.md`。
 
