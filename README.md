@@ -93,6 +93,19 @@ GUI-Setup 从 v1.0.1 起认得出这种情况：点错误页上的**「自己选
 `com.apple.quarantine`**（`DESIGN.md` D40、FR-28），所以上面第 2 条一般用不着手敲 ——
 它只是让"装好了打不开"不再发生，并不解决"这个包值不值得信"：那要等签名 + 公证。
 
+### Windows：在压缩包里直接双击 GUI-Setup.exe
+
+Windows 上「没找到包根（一路向上都没有找着 *-manifest.yaml）」这条报错**通常不是系统干的**
+（Windows 没有 macOS 那种"把进程挪进只读临时目录"的防护），而是资源管理器的压缩包预览：
+在 zip 里直接双击 `GUI-Setup.exe` 时，它**只把这一个文件**解到
+`%TEMP%\Temp<N>_<包名>.zip\` 再启动，跑完连那份临时目录都清掉 —— 所以你看不到自己被解到
+哪儿去了，而那儿既没有清单也没有 `install.cmd`。
+
+正确姿势：**右键那个 zip →「全部解压缩…」**，在解出来的文件夹里再双击 `GUI-Setup.exe`
+（它应该与 `ad-manifest.yaml`、`install.cmd` 并排）。随包的 GUI-Setup 从 **v1.0.2** 起认得出
+这种情况，错误页会直接这么说；更早的版本只会让你"放回去"，而"放回去"对还没解压过的人没有
+意义。命令行那条路（`install.cmd`）一直不受影响。
+
 卸载：
 
 ```sh
@@ -151,7 +164,7 @@ CI 里那两份工具链从公开仓 [dl](https://github.com/qiuzhanghua/dl) 的
 
 包里那几样外部东西都在各自仓库里发好了 release，CI 直接下载现成资产（不再就地编）：
 gpm 取 gpm-go 的 **`v0.6.4`**（`release.yml` 的 `GPM_REF`，跟 `COT_VERSION` /
-`TDP_VERSION` 一样钉死），`GUI-Setup` 取 gsetup-go 的 **`v1.0.1`**（`GSETUP_REF`），
+`TDP_VERSION` 一样钉死），`GUI-Setup` 取 gsetup-go 的 **`v1.0.2`**（`GSETUP_REF`），
 cot / tdp 取 `qiuzhanghua/dl` 上的正式产物。这样装进包里的，就是用户自己去那些
 仓库下也会拿到的同一个二进制；代价是 `GPM_REF` / `GSETUP_REF` 必须写 release 的
 tag（写分支名会在下载那一步直接失败）。下完还会各自问一句版本，对不上就当场失败。

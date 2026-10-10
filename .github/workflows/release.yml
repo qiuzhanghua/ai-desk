@@ -28,7 +28,7 @@ on:
       gsetup_ref:
         description: 随包的 GUI-Setup 用 gsetup-go 的哪个 release tag
         required: false
-        default: v1.0.1
+        default: v1.0.2
 
 permissions:
   contents: write
@@ -39,7 +39,9 @@ env:
   # 的 tag，下载路径也是它 —— 写分支名会在下载那一步直接失败。）
   GPM_REF: ${{ github.event.inputs.gpm_ref || 'v0.6.4' }}
   # 随包的 GUI-Setup 同理：钉在 gsetup-go 的 release tag 上。
-  GSETUP_REF: ${{ github.event.inputs.gsetup_ref || 'v1.0.1' }}
+  # v1.0.2 起认得出 Windows"在压缩包里直接双击"（资源管理器只解那一个文件到临时目录），
+  # 错误页会说清该先「全部解压缩」—— 在那之前这条路上用户只会看到"放回去"。
+  GSETUP_REF: ${{ github.event.inputs.gsetup_ref || 'v1.0.2' }}
   # 打进包里的 cot / tdp 从公开仓 qiuzhanghua/dl 取。那里的 tag 是滚动的
   # （cot / tdp），版本写在资产名里：cot_<版本>_<os>_<arch>。所以这里钉住的是
   # 资产名里那一段版本号，同一个 tag 下换版本不影响可复现性。

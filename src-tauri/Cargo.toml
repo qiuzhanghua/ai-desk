@@ -1,6 +1,6 @@
 [package]
 name = "ai-desk"
-version = "0.3.4"
+version = "0.3.5"
 description = "AI Desk"
 authors = ["qiuzhanghua"]
 edition = "2021"
