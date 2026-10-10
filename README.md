@@ -179,7 +179,7 @@ tools/fetch-deps.sh --smoke                # 取完顺手跑 tools/smoke-test.sh
 全程不碰你真正的 `~/cot`、`~/tdp` 和 shell 配置，也不需要联网：
 
 ```sh
-tools/smoke-test.sh release/ai-desk-0.3.2-darwin-arm64.zip
+tools/smoke-test.sh release/ai-desk-0.3.3-darwin-arm64.zip
 tools/smoke-test.sh some.zip --keep      # 留现场（临时目录里还有 install.log / uninstall.log）
 ```
 
