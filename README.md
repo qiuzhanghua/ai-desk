@@ -149,6 +149,40 @@ CI 里那两份工具链从公开仓 [dl](https://github.com/qiuzhanghua/dl) 的
 
 格式细节见 gpm-go 仓库的 `docs/PACKAGE-FORMAT.md`。
 
+## 本地取依赖与验包
+
+不想每次都自己去找 gpm / cot / tdp / GUI-Setup 的话，`tools/fetch-deps.sh` 把它们拉进
+`.cache/`（已在 `.gitignore` 里），第二次跑直接命中缓存：
+
+```sh
+tools/fetch-deps.sh                        # 取本机平台那四样，缓存命中就跳过
+tools/fetch-deps.sh --force                # 重新取
+tools/fetch-deps.sh --latest               # cot / tdp 不按钉的版本，挑最新
+tools/fetch-deps.sh --no-gpm --no-gsetup   # 只要 cot 与 tdp
+tools/fetch-deps.sh --pack                 # 取完顺手调 tools/package.sh 打包
+tools/fetch-deps.sh --smoke                # 取完顺手跑 tools/smoke-test.sh
+```
+
+版本号不另抄一份：脚本从 `.github/workflows/release.yml` 的 env 里读
+`GPM_REF` / `GSETUP_REF` / `COT_VERSION` / `TDP_VERSION`（同名环境变量可以覆盖）。
+缓存齐了之后它会把你该敲的那行 `tools/package.sh …` 原样打出来，复制就能用。
+布局是 `dl/`（cot、tdp）、`gpm/<ref>/`、`gsetup/<ref>/`（GUI-Setup，没有现成产物时
+就地编）、`bin/wails`、`src/<仓>-<ref>/`、`gocache/`。
+
+打好包想验一验，`tools/smoke-test.sh <zip>` 在临时 HOME 里走一整遍
+「解压 → `./install.sh --yes` → 断言 → `<家>/bin/gpm uninstall <id> --yes` → 断言」，
+全程不碰你真正的 `~/cot`、`~/tdp` 和 shell 配置，也不需要联网：
+
+```sh
+tools/smoke-test.sh release/ai-desk-0.3.2-darwin-arm64.zip
+tools/smoke-test.sh some.zip --keep      # 留现场（临时目录里还有 install.log / uninstall.log）
+```
+
+它查的是契约里那几条：payload 落到 `<家>/`、终端启动器在且带 x 位、账本里有这个 id
+且 `verified: true`、`# >>> gpm >>>` PATH 块恰好一块且指向 `<家>/bin`、图形安装器
+不会被铺进家里；卸完再反过来查一遍（那几样全没了、PATH 块摘干净、工具链自己的
+`bin/` 一个没少）。有断言不成立就退出码 1。
+
 ## 更新方式
 
 **没有自动更新。** v0.2.1 起摘掉了 Tauri updater（Rust 的 `tauri-plugin-updater` +

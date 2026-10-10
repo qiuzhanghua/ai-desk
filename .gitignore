@@ -16,6 +16,9 @@ dist-ssr
 build/
 release/
 
+# tools/fetch-deps.sh 的本地依赖缓存（gpm / cot / tdp / GUI-Setup）
+.cache/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
