@@ -2,12 +2,30 @@
 
 跨平台的桌面应用，Tauri 2 + Vue 3 + TypeScript + Vite。
 
+一个"用 gpm 分发桌面应用"的样板：**装完之后图标能点、终端里敲 `ad` 也能起、还能干净卸掉**。
+面向拿到分发包的使用者（解压 → 双击 / 跑一个脚本），也面向要看这套分发怎么搭的人。
+
+- 发布产物是六个平台各一个 `ai-desk-<版本>-<os>-<arch>.zip`（见 Release）。
+- 包里带着 gpm 本体、图形安装器 GUI-Setup，以及 cot / tdp 两家工具链 —— **安装全程不联网**。
+- **没有自动更新**（v0.2.1 起摘掉了 updater，理由见「更新方式」）：升级就是重新装一次。
+- 本仓不实现安装逻辑：装、卸、账本、打包全在 [gpm-go](https://github.com/qiuzhanghua/gpm-go)，
+  图形安装器在 [gsetup-go](https://github.com/qiuzhanghua/gsetup-go)。
+
 ## 开发
 
 ```sh
 export PATH="$HOME/.cargo/bin:$PATH"   # Rust 不在默认 PATH 里
 npm run tauri dev
 ```
+
+结构：
+
+| 位置 | 是什么 |
+| --- | --- |
+| `src/` | Vue 3 + TS 前端（`App.vue` 是唯一页面，界面上显示的版本号由 `@tauri-apps/api/app` 的 `getVersion()` 从 `tauri.conf.json` 读） |
+| `src-tauri/` | Rust 侧：`tauri.conf.json`（应用名、版本、窗口、`plugins.updater`）、`src/lib.rs` 与 `src/main.rs` |
+| `public/` `index.html` `vite.config.ts` | Vite 那套 |
+| `tools/` | `package.sh`（打成 gpm 分发包）、`fetch-deps.sh`（本地取依赖）、`smoke-test.sh`（临时 HOME 里验包） |
 
 ## 打包
 
@@ -240,5 +258,20 @@ major/minor（`tauri-cli` 会检查，漂移就直接拒绝构建）；端点与
 `src-tauri/tauri.conf.json` 的 `plugins.updater` 里，端点必须是 https
 （否则得开 `dangerousInsecureTransportProtocol`，那一项不该进正式产物）；
 发布流程里得真的把更新包与 `latest.json` 传上去。
+
+## 相关仓库与文档
+
+| 仓库 / 文档 | 在这里的角色 |
+| --- | --- |
+| [gpm-go](https://github.com/qiuzhanghua/gpm-go) | 安装器本体：装、卸、账本、`gpm pack`。分发包格式的**契约**是它的 [`docs/PACKAGE-FORMAT.md`](https://github.com/qiuzhanghua/gpm-go/blob/main/docs/PACKAGE-FORMAT.md)（本仓 README 里那些 v3.10 / v3.12 / v3.13、D40 / D42 / D43、FR-28 / FR-32 都出自那里） |
+| [gsetup-go](https://github.com/qiuzhanghua/gsetup-go) | 随包的图形安装器（`GUI-Setup.app` / `GUI-Setup.exe` / `GUI-Setup`）：把界面上的选择拼成一条 `install.sh` 命令，再交给 gpm |
+| [dl](https://github.com/qiuzhanghua/dl) | 包里的 cot / tdp 从这里取（两个滚动 tag，`COT_VERSION` / `TDP_VERSION` 钉资产名里的版本号） |
+| `tools/package.sh` | 把 `tauri build` 的产物打成 gpm 能吃的 zip |
+| `tools/fetch-deps.sh` | 本地把 gpm / cot / tdp / GUI-Setup 拉进 `.cache/`（版本号从 `release.yml` 读，跟 CI 同一条路） |
+| `tools/smoke-test.sh` | 在临时 HOME 里走一整遍「装 → 断言 → 卸 → 断言」，不碰你真正的 `~/cot` |
+
+## 许可证
+
+MIT，© 太极计算机股份有限公司创新研究院。见 [`LICENSE`](LICENSE)。
 
 
