@@ -73,6 +73,13 @@ cot 的家；`$COT_HOME` 说了算），macOS 上 `.app` 落在家的顶层
 `ad` 都能启动（本机实测过）。会在哪儿撞上：在解压出来的
 目录里**直接双击 `payload/AI Desk.app`**（跳过安装器）—— 那不是安装路径，别这么做。
 
+**双击包顶层的 `GUI-Setup.app` 时，如果报「`readdir … result too large`」或者「请把
+GUI-Setup 放回解压出来的目录里再运行」**：这是 App Translocation —— 系统把带下载标记的
+app 整个复制进只读临时目录再运行，它在那儿看不见并排放着的 `install.sh` 与清单。随包的
+GUI-Setup 从 v1.0.1 起认得出这种情况：点错误页上的**「自己选包目录…」**，挑回你解压出来
+的那一层就行；或者先 `xattr -dr com.apple.quarantine <解压出来的目录>` 再双击。
+（命令行那条路（`./install.sh`）一直不受影响。）
+
 万一还是被拦了，三条路，从推荐到将就：
 
 1. 走「仍要打开」：**系统设置 → 隐私与安全性**，在下面找到被拦的提示点**仍要打开**
@@ -144,7 +151,7 @@ CI 里那两份工具链从公开仓 [dl](https://github.com/qiuzhanghua/dl) 的
 
 包里那几样外部东西都在各自仓库里发好了 release，CI 直接下载现成资产（不再就地编）：
 gpm 取 gpm-go 的 **`v0.6.4`**（`release.yml` 的 `GPM_REF`，跟 `COT_VERSION` /
-`TDP_VERSION` 一样钉死），`GUI-Setup` 取 gsetup-go 的 **`v1.0.0`**（`GSETUP_REF`），
+`TDP_VERSION` 一样钉死），`GUI-Setup` 取 gsetup-go 的 **`v1.0.1`**（`GSETUP_REF`），
 cot / tdp 取 `qiuzhanghua/dl` 上的正式产物。这样装进包里的，就是用户自己去那些
 仓库下也会拿到的同一个二进制；代价是 `GPM_REF` / `GSETUP_REF` 必须写 release 的
 tag（写分支名会在下载那一步直接失败）。下完还会各自问一句版本，对不上就当场失败。
@@ -179,7 +186,7 @@ tools/fetch-deps.sh --smoke                # 取完顺手跑 tools/smoke-test.sh
 全程不碰你真正的 `~/cot`、`~/tdp` 和 shell 配置，也不需要联网：
 
 ```sh
-tools/smoke-test.sh release/ai-desk-0.3.3-darwin-arm64.zip
+tools/smoke-test.sh release/ai-desk-0.3.4-darwin-arm64.zip
 tools/smoke-test.sh some.zip --keep      # 留现场（临时目录里还有 install.log / uninstall.log）
 ```
 
