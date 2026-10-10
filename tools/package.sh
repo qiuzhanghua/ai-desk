@@ -80,11 +80,11 @@ for item in ${embed[@]+"${embed[@]}"}; do
   fi
   case $name in
     cot|tdp) ;;
-    *) echo "不认识的工具链简称：$name（只认 cot / tdp，见 gpm-go 的 PACKAGE-FORMAT.md §3）" >&2
+    *) echo "不认识的工具链简称：${name}（只认 cot / tdp，见 gpm-go 的 PACKAGE-FORMAT.md §3）" >&2
        exit 2 ;;
   esac
   if [ ! -f "$path" ]; then
-    echo "找不到工具链可执行文件：$path（-x $name=…）" >&2
+    echo "找不到工具链可执行文件：${path}（-x $name=…）" >&2
     exit 2
   fi
   tc_names+=("$name")
@@ -140,19 +140,19 @@ fi
 case $os in
   darwin)
     src="$rel/bundle/macos/$product.app"
-    [ -d "$src" ] || { echo "没找到 $src，先跑 tauri build" >&2; exit 1; }
+    [ -d "$src" ] || { echo "没找到 ${src}，先跑 tauri build" >&2; exit 1; }
     entry_name="$product.app"
     entry_block="  darwin: { bundle: \"$product.app\" }"
     ;;
   windows)
     src="$rel/ai-desk.exe"
-    [ -f "$src" ] || { echo "没找到 $src，先跑 tauri build" >&2; exit 1; }
+    [ -f "$src" ] || { echo "没找到 ${src}，先跑 tauri build" >&2; exit 1; }
     entry_name="ai-desk.exe"
     entry_block="  windows: { exe: ai-desk.exe }"
     ;;
   linux)
     src="$rel/ai-desk"
-    [ -f "$src" ] || { echo "没找到 $src，先跑 tauri build" >&2; exit 1; }
+    [ -f "$src" ] || { echo "没找到 ${src}，先跑 tauri build" >&2; exit 1; }
     entry_name="ai-desk"
     entry_block="  linux: { exe: ai-desk }"
     ;;
@@ -181,7 +181,9 @@ if [ -n "$setup_path" ]; then
       setup_block="  linux: { exe: $setup_name }"
       ;;
   esac
-  echo "已准备图形安装器：$setup_name（$setup_path）"
+  # 变量名后面紧跟中文标点时必须用 ${}：macOS runner 上的 bash 3.2 在 C locale
+  # 下会把那个多字节字符的第一个字节吃进变量名，然后报 unbound variable。
+  echo "已准备图形安装器：${setup_name}（${setup_path}）"
 fi
 
 stage="$here/build/package"
