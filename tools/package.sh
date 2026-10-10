@@ -21,6 +21,10 @@
 #   -o  输出目录（默认 release —— 注意不能用 dist/，那是前端构建的产物目录）
 #   -v  覆盖版本号（默认读 src-tauri/tauri.conf.json）
 #   -n  覆盖产品名（默认读 src-tauri/tauri.conf.json）
+#   -s  GUI-Setup 的构建产物（macOS 给 GUI-Setup.app 目录、Windows 给
+#       GUI-Setup.exe、Linux 给裸可执行文件）。给了就写进清单的 setup: 段，
+#       并交给 gpm pack --setup —— 它会躺在 zip 顶层、与 install.sh 并排，
+#       不进 payload/、不进 SHA256SUMS（gpm-go 的 DESIGN.md D43）。
 #   -h  显示这个帮助
 set -euo pipefail
 
@@ -32,12 +36,13 @@ version=""
 product=""
 cmd=ad           # 终端里的简称；清单叫 <简称>-manifest.yaml，见下面
 embed=()         # -x 给的「简称=路径」，可以给多个
+setup_path=""    # -s 给的 GUI-Setup 产物
 
 usage() {
   awk 'NR==1{next} /^set -euo/{exit} {sub(/^# ?/,""); print}' "$0"
 }
 
-while getopts "c:t:o:v:n:x:h" opt; do
+while getopts "c:t:o:v:n:x:s:h" opt; do
   case $opt in
     c) gpm_bin=$OPTARG ;;
     t) triple=$OPTARG ;;
@@ -45,6 +50,7 @@ while getopts "c:t:o:v:n:x:h" opt; do
     v) version=$OPTARG ;;
     n) product=$OPTARG ;;
     x) embed+=("$OPTARG") ;;
+    s) setup_path=$OPTARG ;;
     h) usage; exit 0 ;;
     *) usage; exit 2 ;;
   esac
@@ -152,6 +158,32 @@ case $os in
     ;;
 esac
 
+# 随包的图形安装器（-s，见 gpm-go 的 DESIGN.md D43）。它不进 payload/，
+# 而是躺在 zip 顶层与 install.sh 并排；gpm 只要求「文件名 == 清单里写的
+# 名字」，所以直接用产物的 basename。
+setup_name=""
+setup_block=""
+if [ -n "$setup_path" ]; then
+  setup_name=$(basename "$setup_path")
+  case $os in
+    darwin)
+      [ -d "$setup_path" ] || { echo "-s 在 macOS 上要给 .app 目录，收到的是：$setup_path" >&2; exit 2; }
+      case $setup_name in *.app) ;; *) echo "-s 的目录名要以 .app 结尾，收到的是：$setup_name" >&2; exit 2 ;; esac
+      setup_block="  darwin: { bundle: \"$setup_name\" }"
+      ;;
+    windows)
+      [ -f "$setup_path" ] || { echo "-s 在 Windows 上要给 .exe 文件，收到的是：$setup_path" >&2; exit 2; }
+      case $setup_name in *.exe) ;; *) echo "-s 的文件名要以 .exe 结尾，收到的是：$setup_name" >&2; exit 2 ;; esac
+      setup_block="  windows: { exe: $setup_name }"
+      ;;
+    linux)
+      [ -f "$setup_path" ] || { echo "-s 在 Linux 上要给可执行文件，收到的是：$setup_path" >&2; exit 2; }
+      setup_block="  linux: { exe: $setup_name }"
+      ;;
+  esac
+  echo "已准备图形安装器：$setup_name（$setup_path）"
+fi
+
 stage="$here/build/package"
 rm -rf "$stage"
 mkdir -p "$stage/payload"
@@ -196,6 +228,11 @@ fi
   fi
   echo "entry:"
   echo "$entry_block"
+  if [ -n "$setup_path" ]; then
+    # setup: 与 entry: 平行，但路径**相对包根**（entry 相对 payload/）。
+    echo "setup:"
+    echo "$setup_block"
+  fi
   echo "launch:"
   echo "  cmd: $cmd"
   [ "$os" = darwin ] && echo "  mode: activate"
@@ -208,16 +245,17 @@ esac
 mkdir -p "$(dirname "$zip_path")"
 rm -f "$zip_path"
 
-"$gpm_bin" pack "$stage" \
-  --out "$zip_path" \
-  --os "$os" \
-  --arch "$arch" \
-  --gpm "$gpm_bin" \
-  --default-dir "~/cot"
+pack_args=(--out "$zip_path" --os "$os" --arch "$arch" --gpm "$gpm_bin" --default-dir "~/cot")
+[ -n "$setup_path" ] && pack_args+=(--setup "$setup_path")
+
+"$gpm_bin" pack "$stage" "${pack_args[@]}"
 
 echo
 echo "分发包：$zip_path"
 echo "里面装着 gpm 自己，用户解压后直接跑 install.sh / install.cmd 就行。"
+if [ -n "$setup_path" ]; then
+  echo "图形安装器 $setup_name 也在顶层，解压后双击它就能装（装完自己关掉）。"
+fi
 if [ ${#tc_names[@]} -gt 0 ]; then
   echo "工具链 ${tc_names[*]} 也在这个 zip 里，装的时候不需要联网。"
 fi

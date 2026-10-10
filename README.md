@@ -36,6 +36,13 @@ unzip ai-desk-<版本>-<平台>-<架构>.zip -d ai-desk && cd ai-desk && ./insta
 直接 `./install.sh --dir ~/tdp`；带上 `--yes` 就跳过"要不要写 PATH 块"的那次询问
 （脚本、管道里没人回答问题，不加 `--yes` 就会跳过 PATH 集成）。
 
+也可以不进终端：双击包里的 `GUI-Setup.app`（Windows / Linux 是 `GUI-Setup.exe` /
+`GUI-Setup`）。它在图形界面里问你要哪一家工具链（cot / tdp）、装到哪个家、要不要写 PATH，
+把结果拼成一条命令**先只读地给你看一遍**，再交给同一个 `install.sh` 执行，过程实时
+输出（Unix 上 stderr 是红字；Windows 的伪终端分不开流，失败时整段标红）。它自己不带
+卸载能力之外的副作用：装什么、装到哪儿、账记在哪儿，全由 gpm 说了算。GUI-Setup 与
+`AI Desk.app` 一样是未签名的，第一次打开同样要先手动放行（见下面那节）。
+
 装完：图形界面里能点开（macOS 会出现在 `~/Applications`，也就是启动台里），
 终端里敲 `ad` 也能启动。默认装到 `~/cot`（AI Desk 依赖 cot 才跑得完整，所以家就是
 cot 的家；`$COT_HOME` 说了算），macOS 上 `.app` 落在家的顶层
@@ -92,6 +99,8 @@ cot 的家；`$COT_HOME` 说了算），macOS 上 `.app` 落在家的顶层
 ```sh
 tools/package.sh -c /path/to/gpm -x cot=/path/to/cot -x tdp=/path/to/tdp   # 本机平台
 tools/package.sh -c ./gpm -t aarch64-apple-darwin -x cot=./cot -x tdp=./tdp
+tools/package.sh -c ./gpm -x cot=./cot -x tdp=./tdp \
+  -s /path/to/GUI-Setup.app                                        # 捎上图形安装器
 ```
 
 `-c` 是 gpm 二进制（见 [gpm-go](https://github.com/qiuzhanghua/gpm-go) 的 release，
@@ -101,6 +110,12 @@ tools/package.sh -c ./gpm -t aarch64-apple-darwin -x cot=./cot -x tdp=./tdp
 （tdp 住 `$TDP_HOME`，缺省 `~/tdp`）。用户安装时不需要联网；**不给 `-x` 也能打包**，
 只是清单里没有 `requires`，gpm 会把应用装到平台数据目录
 （macOS `~/Library/Application Support/ad`），终端启动器也不注入 `COT_HOME` / `TDP_HOME`。
+
+`-s <GUI-Setup 产物>` 把图形安装器捎进包里（macOS 给 `GUI-Setup.app` 目录、Windows 给
+`GUI-Setup.exe`、Linux 给裸可执行文件）。它不进 `payload/`，而是躺在 zip 顶层与
+`install.sh` 并排，清单里因此多一段 `setup:`（与 `entry:` 平行，但路径相对**包根**）。
+不给 `-s` 就没有这段，包照样能用 —— 只是用户得自己进终端。这段契约是 gpm v3.13 的
+D43，见 gpm-go 的 `docs/PACKAGE-FORMAT.md`。
 
 CI 里那两份工具链从公开仓 [dl](https://github.com/qiuzhanghua/dl) 的两个滚动 tag
 （`cot` / `tdp`）取，钉的是资产名里的版本号：`COT_VERSION: 2.0.1`、`TDP_VERSION: 27.0.6`。
@@ -120,15 +135,17 @@ CI 里那两份工具链从公开仓 [dl](https://github.com/qiuzhanghua/dl) 的
 | 成员            | 作用                                            |
 | --------------- | ----------------------------------------------- |
 | `install.sh`    | 用户运行的入口（`install.cmd` 是 Windows 版）   |
+| `GUI-Setup.app` | 可选的图形安装器（Windows / Linux 是 `GUI-Setup.exe` / `GUI-Setup`），双击就能装；`-s` 给了才有 |
 | `gpm`           | 安装器本体，按平台挑的那一个                    |
 | `ad-manifest.yaml` | 告诉 gpm 装什么、装完生成哪个命令、要哪几个工具链 |
 | `payload/`      | `AI Desk.app` / `ai-desk.exe` / `ai-desk`       |
 | `tools/<os>_<arch>/` | `-x` 嵌进来的工具链（AI Desk 是 `cot` 与 `tdp`） |
 | `SHA256SUMS`    | `payload/` 与 `tools/` 下每个文件的摘要，gpm 安装前强制校验 |
 
-包里那份 gpm 由 CI 从 gpm-go 的 **`v0.6.3`** 标记就地编出（`release.yml` 的
+包里那份 gpm 由 CI 从 gpm-go 的 **`v0.6.4`** 标记就地编出（`release.yml` 的
 `GPM_REF`，跟 `COT_VERSION` / `TDP_VERSION` 一样钉死），编的时候把版本号注进去，所以
-`<家>/bin/gpm version` 会自报 `0.6.3`，而不是开发期的默认值。
+`<家>/bin/gpm version` 会自报 `0.6.4`，而不是开发期的默认值。随包的 `GUI-Setup.app`
+同理，由 CI 从 gsetup-go 的 **`v0.1.0`** 标记就地编出（`GSETUP_REF`）。
 
 格式细节见 gpm-go 仓库的 `docs/PACKAGE-FORMAT.md`。
 
