@@ -145,7 +145,7 @@ CI 里那两份工具链从公开仓 [dl](https://github.com/qiuzhanghua/dl) 的
 包里那份 gpm 由 CI 从 gpm-go 的 **`v0.6.4`** 标记就地编出（`release.yml` 的
 `GPM_REF`，跟 `COT_VERSION` / `TDP_VERSION` 一样钉死），编的时候把版本号注进去，所以
 `<家>/bin/gpm version` 会自报 `0.6.4`，而不是开发期的默认值。随包的 `GUI-Setup.app`
-同理，由 CI 从 gsetup-go 的 **`v0.1.0`** 标记就地编出（`GSETUP_REF`）。
+同理，由 CI 从 gsetup-go 的 **`v1.0.0`** 标记就地编出（`GSETUP_REF`）。
 
 格式细节见 gpm-go 仓库的 `docs/PACKAGE-FORMAT.md`。
 

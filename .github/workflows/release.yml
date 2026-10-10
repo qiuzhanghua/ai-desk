@@ -36,7 +36,7 @@ env:
   # 不能今天编出 v0.6.4、明天被 gpm-go 的 main 悄悄换掉。
   GPM_REF: ${{ github.event.inputs.gpm_ref || 'v0.6.4' }}
   # 随包的 GUI-Setup 同理：钉在 gsetup-go 的 tag 上。
-  GSETUP_REF: ${{ github.event.inputs.gsetup_ref || 'v0.1.0' }}
+  GSETUP_REF: ${{ github.event.inputs.gsetup_ref || 'v1.0.0' }}
   # 打进包里的 cot / tdp 从公开仓 qiuzhanghua/dl 取。那里的 tag 是滚动的
   # （cot / tdp），版本写在资产名里：cot_<版本>_<os>_<arch>。所以这里钉住的是
   # 资产名里那一段版本号，同一个 tag 下换版本不影响可复现性。
