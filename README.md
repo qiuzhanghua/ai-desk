@@ -117,12 +117,12 @@ Windows 上「没找到包根（一路向上都没有找着 *-manifest.yaml）�
 （Windows 没有 macOS 那种"把进程挪进只读临时目录"的防护），而是资源管理器的压缩包预览：
 在 zip 里直接双击 `GUI-Setup.exe` 时，它**只把这一个文件**解到
 `%TEMP%\Temp<N>_<包名>.zip\` 再启动，跑完连那份临时目录都清掉 —— 所以你看不到自己被解到
-哪儿去了，而那儿既没有清单也没有 `install.cmd`。
+哪儿去了，而那儿既没有清单也没有 `install.cmd` / `install.ps1`。
 
 正确姿势：**右键那个 zip →「全部解压缩…」**，在解出来的文件夹里再双击 `GUI-Setup.exe`
-（它应该与 `ad-manifest.yaml`、`install.cmd` 并排）。随包的 GUI-Setup 从 **v1.0.2** 起认得出
+（它应该与 `ad-manifest.yaml`、`install.cmd` / `install.ps1` 并排）。随包的 GUI-Setup 从 **v1.0.2** 起认得出
 这种情况，错误页会直接这么说；更早的版本只会让你"放回去"，而"放回去"对还没解压过的人没有
-意义。命令行那条路（`install.cmd`）一直不受影响。
+意义。命令行那条路（`install.cmd` 或 `install.ps1`）一直不受影响。
 
 卸载：
 
@@ -155,7 +155,8 @@ tools/package.sh -c ./gpm -x cot=./cot -x tdp=./tdp \
 不给 `-s` 就没有这段，包照样能用 —— 只是用户得自己进终端。这段契约是 gpm v3.13 的
 D43，见 gpm-go 的 `docs/PACKAGE-FORMAT.md`。（GUI-Setup 自己的行为在它那个仓：**
 v1.0.2** 起认得出 Windows"在压缩包里直接双击"，**v1.0.3** 起输出面板里不再显示 pty 的
-终端控制序列 —— 面板里只有纯文本。）
+终端控制序列，**v1.0.4** 起 Windows 上优先跑 `install.ps1`（`pwsh` 7 > `powershell` 5.1；
+被执行策略拦住会自动退回 `install.cmd`）—— 面板里只有纯文本。）
 
 CI 里那两份工具链从公开仓 [dl](https://github.com/qiuzhanghua/dl) 的两个滚动 tag
 （`cot` / `tdp`）取，钉的是资产名里的版本号：`COT_VERSION: 2.0.1`、`TDP_VERSION: 27.0.6`。
@@ -174,7 +175,7 @@ CI 里那两份工具链从公开仓 [dl](https://github.com/qiuzhanghua/dl) 的
 
 | 成员            | 作用                                            |
 | --------------- | ----------------------------------------------- |
-| `install.sh`    | 用户运行的入口（`install.cmd` 是 Windows 版）   |
+| `install.sh` / `install.cmd` / `install.ps1` | 用户运行的入口，三条语义一致：非 Windows 用 `install.sh`；Windows 上优先 `install.ps1`（有 PowerShell 时），被策略拦或老包就退回 `install.cmd` |
 | `GUI-Setup.app` | 可选的图形安装器（Windows / Linux 是 `GUI-Setup.exe` / `GUI-Setup`），双击就能装；`-s` 给了才有 |
 | `gpm`           | 安装器本体，按平台挑的那一个                    |
 | `ad-manifest.yaml` | 告诉 gpm 装什么、装完生成哪个命令、要哪几个工具链 |
@@ -183,8 +184,8 @@ CI 里那两份工具链从公开仓 [dl](https://github.com/qiuzhanghua/dl) 的
 | `SHA256SUMS`    | `payload/` 与 `tools/` 下每个文件的摘要，gpm 安装前强制校验 |
 
 包里那几样外部东西都在各自仓库里发好了 release，CI 直接下载现成资产（不再就地编）：
-gpm 取 gpm-go 的 **`v0.6.5`**（`release.yml` 的 `GPM_REF`，跟 `COT_VERSION` /
-`TDP_VERSION` 一样钉死），`GUI-Setup` 取 gsetup-go 的 **`v1.0.3`**（`GSETUP_REF`），
+gpm 取 gpm-go 的 **`v0.6.6`**（`release.yml` 的 `GPM_REF`，跟 `COT_VERSION` /
+`TDP_VERSION` 一样钉死），`GUI-Setup` 取 gsetup-go 的 **`v1.0.4`**（`GSETUP_REF`），
 cot / tdp 取 `qiuzhanghua/dl` 上的正式产物。这样装进包里的，就是用户自己去那些
 仓库下也会拿到的同一个二进制；代价是 `GPM_REF` / `GSETUP_REF` 必须写 release 的
 tag（写分支名会在下载那一步直接失败）。下完还会各自问一句版本，对不上就当场失败。

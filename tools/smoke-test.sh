@@ -104,6 +104,20 @@ rc_with_marker() {
   done
 }
 
+# ---------- 入口三条都在 ----------
+# gpm v0.6.6 起 gpm pack 同时生成 install.sh / install.cmd / install.ps1（三个平台都一样），
+# 所以这份包里也该有三条 —— Windows 上 GUI-Setup 会挑 .ps1，挑不到才退回 .cmd。
+for f in install.sh install.cmd install.ps1; do
+  want_file "$work/pk/$f" "包里有 $f"
+done
+# .ps1 必须是 UTF-8 with BOM：Windows PowerShell 5.1 读没有 BOM 的文件时按 ANSI 代码页解码，
+# 烘进来的中文家路径会静默变成乱码路径（gpm-go 那边有对应用例钉着）。
+bom=$(head -c 3 "$work/pk/install.ps1" 2>/dev/null | od -An -tx1 | tr -d ' \n')
+if [ "$bom" = "efbbbf" ]; then ok "install.ps1 带 UTF-8 BOM"; else bad "install.ps1 没有 BOM（头三字节 $bom）"; fi
+if grep -q '@args' "$work/pk/install.ps1"; then ok "install.ps1 用 @args 转交参数"; else bad "install.ps1 里没有 @args"; fi
+if grep -q 'param(' "$work/pk/install.ps1"; then bad "install.ps1 里出现了 param( —— --dir 会被当参数名绑定"; else ok "install.ps1 没有 param() 块"; fi
+if grep -q 'ExecutionPolicy' "$work/pk/install.ps1"; then bad "install.ps1 自己带了 ExecutionPolicy —— 那该是调用方的事"; else ok "install.ps1 没自己写 ExecutionPolicy"; fi
+
 # ---------- 装 ----------
 echo "== 装（临时 HOME：$home） =="
 if ! ( cd "$work/pk" && env -u COT_HOME -u TDP_HOME HOME="$home" ./install.sh --yes ) \

@@ -254,7 +254,7 @@ pack_args=(--out "$zip_path" --os "$os" --arch "$arch" --gpm "$gpm_bin" --defaul
 
 echo
 echo "分发包：$zip_path"
-echo "里面装着 gpm 自己，用户解压后直接跑 install.sh / install.cmd 就行。"
+echo "里面装着 gpm 自己，用户解压后直接跑 install.sh / install.cmd / install.ps1 就行。"
 if [ -n "$setup_path" ]; then
   echo "图形安装器 $setup_name 也在顶层，解压后双击它就能装（装完自己关掉）。"
 fi

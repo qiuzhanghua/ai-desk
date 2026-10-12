@@ -24,24 +24,26 @@ on:
       gpm_ref:
         description: 内嵌的 gpm 用 gpm-go 的哪个 release tag
         required: false
-        default: v0.6.5
+        default: v0.6.6
       gsetup_ref:
         description: 随包的 GUI-Setup 用 gsetup-go 的哪个 release tag
         required: false
-        default: v1.0.3
+        default: v1.0.4
 
 permissions:
   contents: write
 
 env:
   # 打进包里的 gpm 取哪个版本。跟工具链一样钉死：分发包必须可复现，
-  # 不能今天装 v0.6.5、明天被 gpm-go 的 main 悄悄换掉。（这里写的是 release
+  # 不能今天装 v0.6.6、明天被 gpm-go 的 main 悄悄换掉。（这里写的是 release
   # 的 tag，下载路径也是它 —— 写分支名会在下载那一步直接失败。）
-  GPM_REF: ${{ github.event.inputs.gpm_ref || 'v0.6.5' }}
+  # v0.6.6 起 gpm pack 多生成一条 install.ps1（Windows 上给终端与 GUI-Setup 用）。
+  GPM_REF: ${{ github.event.inputs.gpm_ref || 'v0.6.6' }}
   # 随包的 GUI-Setup 同理：钉在 gsetup-go 的 release tag 上。
   # v1.0.2 起认得出 Windows"在压缩包里直接双击"（资源管理器只解那一个文件到临时目录），
-  # 错误页会说清该先「全部解压缩」；v1.0.3 起输出面板也不再显示 pty 里的终端控制序列。
-  GSETUP_REF: ${{ github.event.inputs.gsetup_ref || 'v1.0.3' }}
+  # 错误页会说清该先「全部解压缩」；v1.0.3 起输出面板不再显示 pty 里的终端控制序列；
+  # v1.0.4 起 Windows 上优先跑 install.ps1（pwsh 7 > powershell 5.1），被策略拦就退回 install.cmd。
+  GSETUP_REF: ${{ github.event.inputs.gsetup_ref || 'v1.0.4' }}
   # 打进包里的 cot / tdp 从公开仓 qiuzhanghua/dl 取。那里的 tag 是滚动的
   # （cot / tdp），版本写在资产名里：cot_<版本>_<os>_<arch>。所以这里钉住的是
   # 资产名里那一段版本号，同一个 tag 下换版本不影响可复现性。
