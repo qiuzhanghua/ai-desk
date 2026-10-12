@@ -275,14 +275,15 @@ major/minor（`tauri-cli` 会检查，漂移就直接拒绝构建）；端点与
 然后提交、打带注释的 tag，两个远端都推：
 
 ```sh
-git tag -a v0.3.6 -m "AI Desk v0.3.6：……"
-git push origin main v0.3.6    # GitHub：CI（六条打包腿）与发 Release 都在这儿
-git push gitee main v0.3.6     # Gitee：镜像，同样推 main 与 tag
+git tag -a v0.3.7 -m "AI Desk v0.3.7：……"
+git push gh main v0.3.7        # GitHub（这个工作区里的远端叫 gh）：CI（六条打包腿）与发 Release 都在这儿
+git push gitee main v0.3.7     # Gitee：镜像，同样推 main 与 tag
 ```
 
 `.github/workflows/release.yml` 收到 `v*` tag 后六条腿各编一份 zip，再用
-`gh release create` 建 Release 附上六份产物。远端：`origin` = GitHub，
-`gitee` = Gitee 镜像；CI 与 Release 都在 GitHub，但**两边都推**。
+`gh release create` 建 Release 附上六份产物。远端：`gh` = GitHub（这个工作区里的名字，
+别的 clone 里可能叫 `origin`）、`gitee` = Gitee 镜像；CI 与 Release 都在 GitHub，
+但**两边都推**。
 
 ## 相关仓库与文档
 
