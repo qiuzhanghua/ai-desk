@@ -153,7 +153,9 @@ tools/package.sh -c ./gpm -x cot=./cot -x tdp=./tdp \
 `GUI-Setup.exe`、Linux 给裸可执行文件）。它不进 `payload/`，而是躺在 zip 顶层与
 `install.sh` 并排，清单里因此多一段 `setup:`（与 `entry:` 平行，但路径相对**包根**）。
 不给 `-s` 就没有这段，包照样能用 —— 只是用户得自己进终端。这段契约是 gpm v3.13 的
-D43，见 gpm-go 的 `docs/PACKAGE-FORMAT.md`。
+D43，见 gpm-go 的 `docs/PACKAGE-FORMAT.md`。（GUI-Setup 自己的行为在它那个仓：**
+v1.0.2** 起认得出 Windows"在压缩包里直接双击"，**v1.0.3** 起输出面板里不再显示 pty 的
+终端控制序列 —— 面板里只有纯文本。）
 
 CI 里那两份工具链从公开仓 [dl](https://github.com/qiuzhanghua/dl) 的两个滚动 tag
 （`cot` / `tdp`）取，钉的是资产名里的版本号：`COT_VERSION: 2.0.1`、`TDP_VERSION: 27.0.6`。
@@ -182,7 +184,7 @@ CI 里那两份工具链从公开仓 [dl](https://github.com/qiuzhanghua/dl) 的
 
 包里那几样外部东西都在各自仓库里发好了 release，CI 直接下载现成资产（不再就地编）：
 gpm 取 gpm-go 的 **`v0.6.5`**（`release.yml` 的 `GPM_REF`，跟 `COT_VERSION` /
-`TDP_VERSION` 一样钉死），`GUI-Setup` 取 gsetup-go 的 **`v1.0.2`**（`GSETUP_REF`），
+`TDP_VERSION` 一样钉死），`GUI-Setup` 取 gsetup-go 的 **`v1.0.3`**（`GSETUP_REF`），
 cot / tdp 取 `qiuzhanghua/dl` 上的正式产物。这样装进包里的，就是用户自己去那些
 仓库下也会拿到的同一个二进制；代价是 `GPM_REF` / `GSETUP_REF` 必须写 release 的
 tag（写分支名会在下载那一步直接失败）。下完还会各自问一句版本，对不上就当场失败。
