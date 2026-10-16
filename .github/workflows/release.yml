@@ -24,11 +24,11 @@ on:
       gpm_ref:
         description: 内嵌的 gpm 用 gpm-go 的哪个 release tag
         required: false
-        default: v1.0.0
+        default: v1.0.1
       gsetup_ref:
         description: 随包的 GUI-Setup 用 gsetup-go 的哪个 release tag
         required: false
-        default: v1.1.0
+        default: v1.2.0
 
 permissions:
   contents: write
@@ -38,20 +38,26 @@ env:
   # 不能今天装 v1.0.0、明天被 gpm-go 的 main 悄悄换掉。（这里写的是 release
   # 的 tag，下载路径也是它 —— 写分支名会在下载那一步直接失败。）
   # v1.0.0 与 v0.6.6 行为一致（契约 v3.15）：gpm pack 生成 install.sh / install.cmd /
-  # install.ps1 三条入口。
-  GPM_REF: ${{ github.event.inputs.gpm_ref || 'v1.0.0' }}
+  # install.ps1 三条入口；v1.0.1 起自举第二家工具链之前先把那个家建出来 —— 不然
+  # requires: [tdp, cot] 这种"应用住 tdp、cot 回自己的家"的包在干净机器上装不下去
+  # （~/cot 还不存在，cot 就把路径当成包文件名，回一句 COT_HOME 未设置）。
+  GPM_REF: ${{ github.event.inputs.gpm_ref || 'v1.0.1' }}
   # 随包的 GUI-Setup 同理：钉在 gsetup-go 的 release tag 上。
   # v1.0.2 起认得出 Windows"在压缩包里直接双击"（资源管理器只解那一个文件到临时目录），
   # 错误页会说清该先「全部解压缩」；v1.0.3 起输出面板不再显示 pty 里的终端控制序列；
   # v1.0.4 起 Windows 上优先跑 install.ps1（pwsh 7 > powershell 5.1），被策略拦就退回
-  # install.cmd；v1.1.0 与 v1.0.4 行为一致（只抬版本号）。
-  GSETUP_REF: ${{ github.event.inputs.gsetup_ref || 'v1.1.0' }}
+  # install.cmd；v1.1.0 与 v1.0.4 行为一致（只抬版本号）；v1.2.0 起界面 B 的
+  # 缺省工具链从 cot 改成 tdp（那时 AI Desk 的家也改成 tdp 了，两边一致）。
+  GSETUP_REF: ${{ github.event.inputs.gsetup_ref || 'v1.2.0' }}
   # 打进包里的 cot / tdp 从公开仓 qiuzhanghua/dl 取。那里的 tag 是滚动的
   # （cot / tdp），版本写在资产名里：cot_<版本>_<os>_<arch>。所以这里钉住的是
   # 资产名里那一段版本号，同一个 tag 下换版本不影响可复现性。
   DL_REPO: qiuzhanghua/dl
   COT_VERSION: 2.0.1
-  TDP_VERSION: 27.0.6
+  # 27.1.1 起插件元数据多了 entry / assoc：装插件会在 ~/Applications 建入口链接、
+  # 登记文件关联（macOS 只建软链 + 打引导；Linux 真设默认），`rm` 默认会把指向被删
+  # 版本的链接/关联改指到还在的版本、`doctor [--fix]` 收残留。
+  TDP_VERSION: 27.1.1
 
 jobs:
   build:
@@ -278,8 +284,8 @@ jobs:
         run: |
           bash tools/package.sh \
             -c "gpm-bin${{ matrix.ext }}" \
-            -x "cot=$GITHUB_WORKSPACE/cot-bin${{ matrix.ext }}" \
             -x "tdp=$GITHUB_WORKSPACE/tdp-bin${{ matrix.ext }}" \
+            -x "cot=$GITHUB_WORKSPACE/cot-bin${{ matrix.ext }}" \
             -t "${{ matrix.triple }}" \
             -v "${{ steps.ver.outputs.version }}" \
             -n "AI Desk" \

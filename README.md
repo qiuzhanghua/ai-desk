@@ -51,7 +51,7 @@ unzip ai-desk-<版本>-<平台>-<架构>.zip -d ai-desk && cd ai-desk && ./insta
 ```
 
 `install.sh` 会把后面的参数原样交给 gpm（v0.6.3 起，gpm v3.12 的 D42），所以想装到别处
-直接 `./install.sh --dir ~/tdp`；带上 `--yes` 就跳过"要不要写 PATH 块"的那次询问
+直接 `./install.sh --dir ~/cot`（缺省是 `~/tdp`）；带上 `--yes` 就跳过"要不要写 PATH 块"的那次询问
 （脚本、管道里没人回答问题，不加 `--yes` 就会跳过 PATH 集成）。
 
 也可以不进终端：双击包里的 `GUI-Setup.app`（Windows / Linux 是 `GUI-Setup.exe` /
@@ -62,19 +62,19 @@ unzip ai-desk-<版本>-<平台>-<架构>.zip -d ai-desk && cd ai-desk && ./insta
 `AI Desk.app` 一样是未签名的，第一次打开同样要先手动放行（见下面那节）。
 
 装完：图形界面里能点开（macOS 会出现在 `~/Applications`，也就是启动台里），
-终端里敲 `ad` 也能启动。默认装到 `~/cot`（AI Desk 依赖 cot 才跑得完整，所以家就是
-cot 的家；`$COT_HOME` 说了算），macOS 上 `.app` 落在家的顶层
-（`~/cot/AI Desk.app`，v3.6 起不进 `lib/`），终端启动器会把 `COT_HOME`、`TDP_HOME` 与
+终端里敲 `ad` 也能启动。默认装到 `~/tdp`（AI Desk 依赖 tdp 才跑得完整，所以家就是
+tdp 的家；`$TDP_HOME` 说了算），macOS 上 `.app` 落在家的顶层
+（`~/tdp/AI Desk.app`，v3.6 起不进 `lib/`），终端启动器会把 `COT_HOME`、`TDP_HOME` 与
 `PATH` 交给应用进程。
 
-包里还带着 tdp（清单里 `requires: [cot, tdp]`）。它不跟 AI Desk 同住：gpm 只让
-`requires` 的第一家（cot）当应用的家，tdp 回它自己的家 —— `$TDP_HOME`，没设就是
-`~/tdp`。
+包里还带着 cot（清单里 `requires: [tdp, cot]`）。它不跟 AI Desk 同住：gpm 只让
+`requires` 的第一家（tdp）当应用的家，cot 回它自己的家 —— `$COT_HOME`，没设就是
+`~/cot`。
 
-顺带一提：包里自带一份 gpm，装的时候会把它拷进 `~/cot/bin/gpm`；那儿**已经有**
+顺带一提：包里自带一份 gpm，装的时候会把它拷进 `~/tdp/bin/gpm`；那儿**已经有**
 一份时先比一次版本，包里这份更新才会替换（gpm v3.11 起，`--force` 才无视版本）。
 所以装一次 AI Desk 也可能顺手把 gpm 自己升上去，而升级一次 AI Desk 之后
-`~/cot/bin/gpm version` 报的就是包里那份的版本。
+`~/tdp/bin/gpm version` 报的就是包里那份的版本。
 
 **覆盖安装（也就是升级）之前先把 AI Desk 退掉** —— 它还开着时 gpm 会拒绝动手，
 理由与 `--force` 的用法见下面的「更新方式」。
@@ -86,7 +86,7 @@ cot 的家；`$COT_HOME` 说了算），macOS 上 `.app` 落在家的顶层
 双击会被 Gatekeeper 直接拒掉（`open` 返回 `-128`，界面上是「Apple 无法检查它
 是否包含恶意软件」）。
 
-**正常的安装路径不受影响。** `./install.sh` 照跑，gpm 把 `.app` 复刻进 `~/cot` 时会清掉
+**正常的安装路径不受影响。** `./install.sh` 照跑，gpm 把 `.app` 复刻进 `~/tdp` 时会清掉
 带过来的标记（v3.10 起显式 `xattr -dr`，不再只靠"复制碰巧不搬扩展属性"），装完双击、
 `ad` 都能启动（本机实测过）。会在哪儿撞上：在解压出来的
 目录里**直接双击 `payload/AI Desk.app`**（跳过安装器）—— 那不是安装路径，别这么做。
@@ -103,7 +103,7 @@ GUI-Setup 从 v1.0.1 起认得出这种情况：点错误页上的**「自己选
 1. 走「仍要打开」：**系统设置 → 隐私与安全性**，在下面找到被拦的提示点**仍要打开**
    （macOS 15 起，右键→「打开」这条老路基本失效了）。
 2. 摘掉这个应用的下载标记：
-   `xattr -dr com.apple.quarantine ~/cot/AI\ Desk.app`
+   `xattr -dr com.apple.quarantine ~/tdp/AI\ Desk.app`
 3. 干脆全程走终端（`unzip` + `./install.sh`）：这条路不产生下载标记。
 
 **根治办法是签名 + 公证**，那是 gpm-go 的 `DESIGN.md` R1 里记着的发布阻塞项。安装器
@@ -127,7 +127,7 @@ Windows 上「没找到包根（一路向上都没有找着 *-manifest.yaml）�
 卸载：
 
 ```sh
-~/cot/bin/gpm uninstall ai-desk
+~/tdp/bin/gpm uninstall ai-desk
 ```
 
 ## 打包成 gpm 分发包
@@ -135,17 +135,17 @@ Windows 上「没找到包根（一路向上都没有找着 *-manifest.yaml）�
 `tools/package.sh` 把 `tauri build` 的产物打成一个 gpm 能吃的 zip：
 
 ```sh
-tools/package.sh -c /path/to/gpm -x cot=/path/to/cot -x tdp=/path/to/tdp   # 本机平台
-tools/package.sh -c ./gpm -t aarch64-apple-darwin -x cot=./cot -x tdp=./tdp
-tools/package.sh -c ./gpm -x cot=./cot -x tdp=./tdp \
+tools/package.sh -c /path/to/gpm -x tdp=/path/to/tdp -x cot=/path/to/cot   # 本机平台
+tools/package.sh -c ./gpm -t aarch64-apple-darwin -x tdp=./tdp -x cot=./cot
+tools/package.sh -c ./gpm -x tdp=./tdp -x cot=./cot \
   -s /path/to/GUI-Setup.app                                        # 捎上图形安装器
 ```
 
 `-c` 是 gpm 二进制（见 [gpm-go](https://github.com/qiuzhanghua/gpm-go) 的 release，
-每个平台一个）。`-x cot=<cot 可执行文件>` 把 cot 一起打进包里，`-x tdp=…` 同理，
-清单里写 `requires: [cot, tdp]`（可以只给一家）。**顺序有意义**：第一家是应用自己住的
-那个家（AI Desk 给的是 cot，所以默认落在 `~/cot`），第二家往后各回自己的家
-（tdp 住 `$TDP_HOME`，缺省 `~/tdp`）。用户安装时不需要联网；**不给 `-x` 也能打包**，
+每个平台一个）。`-x tdp=<tdp 可执行文件>` 把 tdp 一起打进包里，`-x cot=…` 同理，
+清单里写 `requires: [tdp, cot]`（可以只给一家）。**顺序有意义**：第一家是应用自己住的
+那个家（AI Desk 给的是 tdp，所以默认落在 `~/tdp`），第二家往后各回自己的家
+（cot 住 `$COT_HOME`，缺省 `~/cot`）。用户安装时不需要联网；**不给 `-x` 也能打包**，
 只是清单里没有 `requires`，gpm 会把应用装到平台数据目录
 （macOS `~/Library/Application Support/ad`），终端启动器也不注入 `COT_HOME` / `TDP_HOME`。
 
@@ -159,7 +159,9 @@ v1.0.2** 起认得出 Windows"在压缩包里直接双击"，**v1.0.3** 起输�
 被执行策略拦住会自动退回 `install.cmd`）—— 面板里只有纯文本。）
 
 CI 里那两份工具链从公开仓 [dl](https://github.com/qiuzhanghua/dl) 的两个滚动 tag
-（`cot` / `tdp`）取，钉的是资产名里的版本号：`COT_VERSION: 2.0.1`、`TDP_VERSION: 27.0.6`。
+（`cot` / `tdp`）取，钉的是资产名里的版本号：`COT_VERSION: 2.0.1`、`TDP_VERSION: 27.1.1`
+（27.1.1 起 tdp 的插件元数据支持 `entry` / `assoc`：装插件会建入口链接、登记文件关联，
+`tdp remove` 默认把指向被删版本的链接改指到还在的版本，`tdp doctor [--fix]` 收残留）。
 （v0.3.1 起改走这里：以前 cot 从私有仓 `cot_cli` 取，要一个 `COT_CLI_TOKEN` secret，
 现在公开仓的默认 token 就能读，那个 secret 不再需要 —— 也顺手支持了 Linux 上按 libc
 分家的 gnu / musl 两套资产，我们取 gnu 那一支。）
@@ -184,8 +186,8 @@ CI 里那两份工具链从公开仓 [dl](https://github.com/qiuzhanghua/dl) 的
 | `SHA256SUMS`    | `payload/` 与 `tools/` 下每个文件的摘要，gpm 安装前强制校验 |
 
 包里那几样外部东西都在各自仓库里发好了 release，CI 直接下载现成资产（不再就地编）：
-gpm 取 gpm-go 的 **`v1.0.0`**（`release.yml` 的 `GPM_REF`，跟 `COT_VERSION` /
-`TDP_VERSION` 一样钉死），`GUI-Setup` 取 gsetup-go 的 **`v1.1.0`**（`GSETUP_REF`），
+gpm 取 gpm-go 的 **`v1.0.1`**（`release.yml` 的 `GPM_REF`，跟 `COT_VERSION` /
+`TDP_VERSION` 一样钉死），`GUI-Setup` 取 gsetup-go 的 **`v1.2.0`**（`GSETUP_REF`），
 cot / tdp 取 `qiuzhanghua/dl` 上的正式产物。这样装进包里的，就是用户自己去那些
 仓库下也会拿到的同一个二进制；代价是 `GPM_REF` / `GSETUP_REF` 必须写 release 的
 tag（写分支名会在下载那一步直接失败）。下完还会各自问一句版本，对不上就当场失败。
@@ -241,7 +243,7 @@ JS 的 `@tauri-apps/plugin-updater`）：当时端点写的是开发期的
 升级的办法就是重新装一次（覆盖式安装）：
 
 ```sh
-~/cot/bin/gpm install <新的分发包目录或 zip>
+~/tdp/bin/gpm install <新的分发包目录或 zip>
 ```
 
 **升级之前先把 AI Desk 退掉。** 它还开着的时候 gpm 会拒绝动手（退出码 `1`，一个字节
@@ -253,8 +255,8 @@ JS 的 `@tauri-apps/plugin-updater`）：当时端点写的是开发期的
 （这套行为在 macOS 15.8.1 上整条走过一遍：运行中升级被拒 → `--force` 放行 → 幽灵进程
 真的出现。过程记在 gpm-go 仓库 `DESIGN.md` 的 §3 与 D31/§2.9.1。）
 
-账本里的版本号会跟着更新。`~/cot/bin/ad`、`~/Applications/AI Desk.app`（macOS 上的
-软链）与 `~/cot/AI Desk.app` 指向同一个入口，覆盖安装之后照旧能用。
+账本里的版本号会跟着更新。`~/tdp/bin/ad`、`~/Applications/AI Desk.app`（macOS 上的
+软链）与 `~/tdp/AI Desk.app` 指向同一个入口，覆盖安装之后照旧能用。
 
 要重新加回自动更新，三件事缺一不可：Rust 侧与 JS 侧的版本必须钉同一个
 major/minor（`tauri-cli` 会检查，漂移就直接拒绝构建）；端点与签名公钥写在
@@ -295,7 +297,7 @@ git push gitee main v0.3.7     # Gitee：镜像，同样推 main 与 tag
 | [dl](https://github.com/qiuzhanghua/dl) | 包里的 cot / tdp 从这里取（两个滚动 tag，`COT_VERSION` / `TDP_VERSION` 钉资产名里的版本号） |
 | `tools/package.sh` | 把 `tauri build` 的产物打成 gpm 能吃的 zip |
 | `tools/fetch-deps.sh` | 本地把 gpm / cot / tdp / GUI-Setup 拉进 `.cache/`（版本号从 `release.yml` 读，跟 CI 同一条路） |
-| `tools/smoke-test.sh` | 在临时 HOME 里走一整遍「装 → 断言 → 卸 → 断言」，不碰你真正的 `~/cot` |
+| `tools/smoke-test.sh` | 在临时 HOME 里走一整遍「装 → 断言 → 卸 → 断言」，不碰你真正的 `~/cot`、`~/tdp` |
 
 ## 许可证
 

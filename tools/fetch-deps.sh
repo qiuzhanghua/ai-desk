@@ -262,7 +262,8 @@ product=$(sed -n 's/.*"productName"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' 
 rel() { echo "${1#$here/}"; }
 pack_args=()
 if [ -n "$gpm_bin" ]; then pack_args+=(-c "$(rel "$gpm_bin")"); fi
-pack_args+=(-x "cot=$(rel "$cot_bin")" -x "tdp=$(rel "$tdp_bin")")
+# 顺序有意义：第一家是 AI Desk 自己住的那个家（见 tools/package.sh 的 -x 说明）。
+pack_args+=(-x "tdp=$(rel "$tdp_bin")" -x "cot=$(rel "$cot_bin")")
 pack_args+=(-t "$triple" -v "$version" -n "$product")
 if [ -n "$setup_path" ]; then pack_args+=(-s "$(rel "$setup_path")"); fi
 

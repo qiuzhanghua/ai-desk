@@ -14,8 +14,8 @@
 #       cot / tdp）。它会被摆成 tools/<os>_<arch>/<简称>[.exe]，并在清单里写
 #       requires: [<简称>, …]——gpm 安装时会拿它去铺那个家（离线，见
 #       gpm-go 的 DESIGN.md D32）。**顺序有意义**：第一家是应用自己住的那个家
-#       （这里给 cot，所以默认目录是 ~/cot），第二家往后各回自己的家
-#       （tdp 住 $TDP_HOME，缺省 ~/tdp）。只有 requires 非空时，终端启动器
+#       （AI Desk 给的是 tdp，所以默认目录是 ~/tdp），第二家往后各回自己的家
+#       （cot 住 $COT_HOME，缺省 ~/cot）。只有 requires 非空时，终端启动器
 #       才会注入 COT_HOME/TDP_HOME 并绕开 macOS 的 open（D33）。
 #   -t  cargo target 三元组，例如 x86_64-apple-darwin；默认用宿主平台
 #   -o  输出目录（默认 release —— 注意不能用 dist/，那是前端构建的产物目录）
@@ -213,7 +213,7 @@ if [ ${#tc_names[@]} -gt 0 ]; then
 else
   echo "注意：这次没嵌工具链（-x <简称>=<路径>），清单里不会有 requires：" >&2
   echo "      装的时候不会去铺任何工具链，终端启动器也不注入 COT_HOME/TDP_HOME。" >&2
-  echo "      装到哪儿仍由 --default-dir 决定（这个脚本给的是 ~/cot）。" >&2
+  echo "      装到哪儿仍由 --default-dir 决定（这个脚本给的是 ~/tdp）。" >&2
 fi
 
 # 清单描述的是「形态」，不是「平台」—— 一份清单可以三平台通用，
@@ -224,7 +224,7 @@ fi
   echo "version: $version"
   if [ ${#tc_names[@]} -gt 0 ]; then
     # 全写上，顺序就是 -x 给的顺序：第一家决定「这个应用住哪个家」（D21），
-    # 第二家往后 gpm 会让它们各回自己的家（tdp → $TDP_HOME，缺省 ~/tdp）。
+    # 第二家往后 gpm 会让它们各回自己的家（cot → $COT_HOME，缺省 ~/cot）。
     joined=$(printf '%s, ' "${tc_names[@]}")
     echo "requires: [${joined%, }]"
   fi
@@ -247,7 +247,7 @@ esac
 mkdir -p "$(dirname "$zip_path")"
 rm -f "$zip_path"
 
-pack_args=(--out "$zip_path" --os "$os" --arch "$arch" --gpm "$gpm_bin" --default-dir "~/cot")
+pack_args=(--out "$zip_path" --os "$os" --arch "$arch" --gpm "$gpm_bin" --default-dir "~/tdp")
 [ -n "$setup_path" ] && pack_args+=(--setup "$setup_path")
 
 "$gpm_bin" pack "$stage" "${pack_args[@]}"
