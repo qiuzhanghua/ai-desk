@@ -18,6 +18,35 @@ export PATH="$HOME/.cargo/bin:$PATH"   # Rust 不在默认 PATH 里
 npm run tauri dev
 ```
 
+### Linux 系统依赖
+
+Tauri 在 Linux 上走 CGO + `pkg-config` 找系统的 GTK 与 webview，**只有运行时包不够，得装 `-dev`**。
+缺了的话 `npm run tauri dev` 会停在 `cargo build` 这一步：
+
+```text
+Package gtk+-3.0 was not found in the pkg-config search path.
+Perhaps you should add the directory containing `gtk+-3.0.pc'
+```
+
+装齐：
+
+```sh
+sudo apt-get update && sudo apt-get install -y \
+  libwebkit2gtk-4.1-dev build-essential curl wget file \
+  libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+```
+
+这份清单与 `.github/workflows/release.yml` 里「装 Linux 系统依赖」那一步相同 —— 改一处要改两处。
+Ubuntu 24.04 起系统里只有 `webkit2gtk-4.1`，Tauri 2 要的正好是它（Wails v2 那边才是 `4.0`，
+得靠 `webkit2_41` tag 转过去）。
+
+**这里不含 `patchelf` / `libfuse2` / `xdg-utils`**：本仓在 Linux 上只出裸可执行文件
+（`tauri build --no-bundle`，见「打包」），不产 AppImage 与 deb，因此用不到 linuxdeploy 那套打包器。
+若要让 `npm run tauri build` 连 `deb` / `AppImage` 一起出，再补 `patchelf libfuse2 xdg-utils`
+（`src-tauri/tauri.conf.json` 的 `bundle.targets` 是 `all`，不加 `--no-bundle` 就都会试着打）。
+
+Windows / macOS 不需要装任何额外东西：WebView2 随 Win10/11 的 Edge 预装，macOS 用系统 WKWebView。
+
 结构：
 
 | 位置 | 是什么 |
@@ -32,6 +61,7 @@ npm run tauri dev
 ```sh
 ./node_modules/.bin/tauri build --bundles app     # macOS：只要 .app，不生成 dmg
 ./node_modules/.bin/tauri build                   # Windows：裸 exe + NSIS 安装包
+./node_modules/.bin/tauri build --no-bundle       # Linux：只要裸可执行文件（见上面「Linux 系统依赖」）
 ```
 
 产物位置：
