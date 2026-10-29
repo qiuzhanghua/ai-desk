@@ -28,7 +28,7 @@ on:
       gsetup_ref:
         description: 随包的 GUI-Setup 用 gsetup-go 的哪个 release tag
         required: false
-        default: v1.2.0
+        default: v2.0.2
 
 permissions:
   contents: write
@@ -43,12 +43,11 @@ env:
   # （~/cot 还不存在，cot 就把路径当成包文件名，回一句 COT_HOME 未设置）。
   GPM_REF: ${{ github.event.inputs.gpm_ref || 'v1.0.1' }}
   # 随包的 GUI-Setup 同理：钉在 gsetup-go 的 release tag 上。
-  # v1.0.2 起认得出 Windows"在压缩包里直接双击"（资源管理器只解那一个文件到临时目录），
-  # 错误页会说清该先「全部解压缩」；v1.0.3 起输出面板不再显示 pty 里的终端控制序列；
-  # v1.0.4 起 Windows 上优先跑 install.ps1（pwsh 7 > powershell 5.1），被策略拦就退回
-  # install.cmd；v1.1.0 与 v1.0.4 行为一致（只抬版本号）；v1.2.0 起界面 B 的
-  # 缺省工具链从 cot 改成 tdp（那时 AI Desk 的家也改成 tdp 了，两边一致）。
-  GSETUP_REF: ${{ github.event.inputs.gsetup_ref || 'v1.2.0' }}
+  # v2.0.0 起 gsetup 迁到 Wails v3 + GTK4（默认 webkitgtk-6.0）；v2.0.1 修了
+  # macOS/Windows 包里的版本与 identifier；v2.0.2 起 Linux 额外发布
+  # GUI-Setup-<版本>-linux-<arch>-gtk3（webkit2gtk-4.1），与 AI Desk 本体
+  # 的 4.1 依赖对齐，老发行版也能双击安装器。
+  GSETUP_REF: ${{ github.event.inputs.gsetup_ref || 'v2.0.2' }}
   # 打进包里的 cot / tdp 从公开仓 qiuzhanghua/dl 取。那里的 tag 是滚动的
   # （cot / tdp），版本写在资产名里：cot_<版本>_<os>_<arch>。所以这里钉住的是
   # 资产名里那一段版本号，同一个 tag 下换版本不影响可复现性。
@@ -166,7 +165,9 @@ jobs:
               setup="$GITHUB_WORKSPACE/setup-asset/GUI-Setup.exe"
               ;;
             linux)
-              asset="GUI-Setup-${version}-linux-${{ matrix.goarch }}"
+              # Linux 用 GTK3/4.1 那一份：AI Desk 本体只要 webkit2gtk-4.1，
+              # 而 GTK4 那份要 webkitgtk-6.0，老发行版没有。
+              asset="GUI-Setup-${version}-linux-${{ matrix.goarch }}-gtk3"
               gh release download "$GSETUP_REF" -R qiuzhanghua/gsetup-go -p "$asset" -D setup-asset
               cp "setup-asset/$asset" setup-asset/GUI-Setup
               chmod +x setup-asset/GUI-Setup

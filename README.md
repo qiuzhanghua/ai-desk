@@ -217,7 +217,7 @@ CI 里那两份工具链从公开仓 [dl](https://github.com/qiuzhanghua/dl) 的
 
 包里那几样外部东西都在各自仓库里发好了 release，CI 直接下载现成资产（不再就地编）：
 gpm 取 gpm-go 的 **`v1.0.1`**（`release.yml` 的 `GPM_REF`，跟 `COT_VERSION` /
-`TDP_VERSION` 一样钉死），`GUI-Setup` 取 gsetup-go 的 **`v1.2.0`**（`GSETUP_REF`），
+`TDP_VERSION` 一样钉死），`GUI-Setup` 取 gsetup-go 的 **`v2.0.2`**（`GSETUP_REF`），
 cot / tdp 取 `qiuzhanghua/dl` 上的正式产物。这样装进包里的，就是用户自己去那些
 仓库下也会拿到的同一个二进制；代价是 `GPM_REF` / `GSETUP_REF` 必须写 release 的
 tag（写分支名会在下载那一步直接失败）。下完还会各自问一句版本，对不上就当场失败。
