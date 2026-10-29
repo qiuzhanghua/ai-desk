@@ -37,8 +37,9 @@ sudo apt-get update && sudo apt-get install -y \
 ```
 
 这份清单与 `.github/workflows/release.yml` 里「装 Linux 系统依赖」那一步相同 —— 改一处要改两处。
-Ubuntu 24.04 起系统里只有 `webkit2gtk-4.1`，Tauri 2 要的正好是它（Wails v2 那边才是 `4.0`，
-得靠 `webkit2_41` tag 转过去）。
+Ubuntu 24.04 起系统里只有 `webkit2gtk-4.1`，Tauri 2 要的正好是它。随包的 GUI-Setup
+（gsetup 2.0.2 起）在 Linux 上也特意用 **GTK3/4.1** 构建，与本体依赖一致；GTK4 那一支要
+`libwebkitgtk-6.0-4`，老发行版没有，所以不随包。
 
 **这里不含 `patchelf` / `libfuse2` / `xdg-utils`**：本仓在 Linux 上只出裸可执行文件
 （`tauri build --no-bundle`，见「打包」），不产 AppImage 与 deb，因此用不到 linuxdeploy 那套打包器。
